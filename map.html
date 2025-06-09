@@ -11,7 +11,7 @@
             height: 100%;
             margin: 0;
             padding: 0;
-            overflow: hidden; /* جلوگیری از اسکرول ناخواسته */
+            overflow: hidden;
         }
         #map {
             width: 100%;
@@ -20,10 +20,12 @@
             top: 0;
             left: 0;
         }
-        
-        /* این بخش برای تغییر اشاره‌گر نقشه به حالت عادی اضافه شده است */
         .leaflet-container, .leaflet-grab, .leaflet-interactive {
             cursor: default !important;
+        }
+        .custom-div-icon {
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.3);
         }
     </style>
 </head>
@@ -32,43 +34,58 @@
     <script>
         // ایجاد نقشه با مختصات اولیه (کرمانشاه)
         var map = L.map('map').setView([34.3142, 47.0650], 10);
+        var markers = L.layerGroup().addTo(map);
 
         // افزودن لایه OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // نمونه دکل‌های فرضی (با مختصات در استان کرمانشاه)
-        var towers = [
-            { name: "دکل ۱ - کرمانشاه", lat: 34.3142, lng: 47.0650 },
-            { name: "دکل ۲ - اسلام‌آباد غرب", lat: 34.1109, lng: 46.5273 },
-            { name: "دکل ۳ - جوانرود", lat: 34.8067, lng: 46.5172 },
-            { name: "دکل ۴ - پاوه", lat: 35.0434, lng: 46.3563 }
-        ];
+        function updateTowers(towers) {
+            // پاک کردن مارکرهای قبلی
+            markers.clearLayers();
 
-        // افزودن مارکر برای هر دکل
-        towers.forEach(function(tower) {
-            L.marker([tower.lat, tower.lng])
-                .addTo(map)
-                .bindPopup("<b>" + tower.name + "</b><br>مختصات: " + tower.lat + ", " + tower.lng);
-        });
+            // اضافه کردن مارکرهای جدید
+            towers.forEach(function(tower) {
+                // تعیین رنگ بر اساس سطح ولتاژ
+                let color;
+                switch(tower.voltage) {
+                    case '400':
+                        color = '#ff0000';  // قرمز برای 400 کیلوولت
+                        break;
+                    case '230':
+                        color = '#ff9900';  // نارنجی برای 230 کیلوولت
+                        break;
+                    case '132':
+                        color = '#ffff00';  // زرد برای 132 کیلوولت
+                        break;
+                    case '63':
+                        color = '#3388ff';  // آبی برای 63 کیلوولت
+                        break;
+                    default:
+                        color = '#808080';  // خاکستری برای موارد نامشخص
+                }
 
-        // نمونه مسیرهای سیم (خطوط بین دکل‌ها)
-        var lines = [
-            [[34.3142, 47.0650], [34.1109, 46.5273]], // دکل ۱ به دکل ۲
-            [[34.1109, 46.5273], [34.8067, 46.5172]], // دکل ۲ به دکل ۳
-            [[34.8067, 46.5172], [35.0434, 46.3563]], // دکل ۳ به دکل ۴
-            [[34.3142, 47.0650], [35.0434, 46.3563]]  // دکل ۱ به دکل ۴
-        ];
+                // ایجاد آیکون سفارشی
+                let markerIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                });
 
-        // افزودن خطوط برای مسیرهای سیم
-        lines.forEach(function(line) {
-            L.polyline(line, {
-                color: 'blue',
-                weight: 3,
-                opacity: 0.7
-            }).addTo(map);
-        });
+                // افزودن مارکر به نقشه
+                L.marker([tower.lat, tower.lng], { icon: markerIcon })
+                    .bindPopup(tower.name)
+                    .addTo(markers);
+            });
+
+            // تنظیم محدوده نقشه برای نمایش همه مارکرها
+            if (towers.length > 0) {
+                var bounds = L.latLngBounds(towers.map(t => [t.lat, t.lng]));
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
     </script>
 </body>
 </html>

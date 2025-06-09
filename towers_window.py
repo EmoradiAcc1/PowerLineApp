@@ -316,6 +316,33 @@ class TowersInputDialog(QDialog):
 
         self.main_layout.addWidget(self.section4)
 
+        # سکشن موقعیت جغرافیایی
+        self.section5 = QGroupBox("موقعیت جغرافیایی")
+        self.section5.setFont(self.font)
+        self.section5_layout = QVBoxLayout()
+        self.section5_layout.setContentsMargins(10, 10, 10, 10)
+        self.section5_layout.setSpacing(8)
+        self.section5.setLayout(self.section5_layout)
+
+        # ردیف اول: طول و عرض جغرافیایی
+        self.longitude = QLineEdit()
+        self.longitude.setFont(self.font)
+        self.longitude.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.longitude.setPlaceholderText("مثال: 47.235")
+        self.latitude = QLineEdit()
+        self.latitude.setFont(self.font)
+        self.latitude.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.latitude.setPlaceholderText("مثال: 34.567")
+        row_coords = QHBoxLayout()
+        row_coords.addWidget(QLabel("طول جغرافیایی:", font=self.font))
+        row_coords.addWidget(self.longitude)
+        row_coords.addSpacing(20)
+        row_coords.addWidget(QLabel("عرض جغرافیایی:", font=self.font))
+        row_coords.addWidget(self.latitude)
+        self.section5_layout.addLayout(row_coords)
+
+        self.main_layout.addWidget(self.section5)
+
         # دکمه‌ها
         self.button_layout = QHBoxLayout()
         self.save_button = QPushButton("ذخیره")
@@ -359,6 +386,8 @@ class TowersInputDialog(QDialog):
             self.insulator_count_c2_r.setText(str(tower_data.get('insulator_count_c2_r', '')))
             self.insulator_count_c2_s.setText(str(tower_data.get('insulator_count_c2_s', '')))
             self.insulator_count_c2_t.setText(str(tower_data.get('insulator_count_c2_t', '')))
+            self.longitude.setText(str(tower_data.get('longitude', '')))
+            self.latitude.setText(str(tower_data.get('latitude', '')))
 
         # تنظیم اندازه خودکار
         self.main_layout.addStretch()
@@ -370,7 +399,7 @@ class TowersInputDialog(QDialog):
 
     def adjust_dialog_size(self):
         """تنظیم خودکار اندازه دیالوگ بر اساس محتوای سکشن‌ها"""
-        sections = [self.section1, self.section2, self.section3, self.section4]
+        sections = [self.section1, self.section2, self.section3, self.section4, self.section5]
         total_height = 0
 
         # محاسبه ارتفاع سکشن‌ها
@@ -450,6 +479,10 @@ class TowersInputDialog(QDialog):
             return False, "تعداد مقره S مدار دوم باید عدد باشد!"
         if self.insulator_count_c2_t.text() and not self.insulator_count_c2_t.text().isdigit():
             return False, "تعداد مقره T مدار دوم باید عدد باشد!"
+        if self.longitude.text() and not re.match(r"^-?\d+(\.\d+)?$", self.longitude.text()):
+            return False, "طول جغرافیایی نامعتبر است!"
+        if self.latitude.text() and not re.match(r"^-?\d+(\.\d+)?$", self.latitude.text()):
+            return False, "عرض جغرافیایی نامعتبر است!"
         existing_towers = self.db.fetch_all(
             "SELECT tower_number FROM towers WHERE line_name = ? AND id != ?",
             (self.line_name.currentText(), self.current_id or -1)
@@ -495,6 +528,8 @@ class TowersInputDialog(QDialog):
             'insulator_count_c2_r': self.insulator_count_c2_r.text(),
             'insulator_count_c2_s': self.insulator_count_c2_s.text(),
             'insulator_count_c2_t': self.insulator_count_c2_t.text(),
+            'longitude': self.longitude.text(),
+            'latitude': self.latitude.text(),
             'id': self.current_id
         }
         self.accept()
@@ -520,7 +555,8 @@ class TowersWindow(QWidget):
             "نوع مقره R مدار اول", "نوع مقره S مدار اول", "نوع مقره T مدار اول",
             "نوع مقره R مدار دوم", "نوع مقره S مدار دوم", "نوع مقره T مدار دوم",
             "تعداد R مدار اول", "تعداد S مدار اول", "تعداد T مدار اول",
-            "تعداد R مدار دوم", "تعداد S مدار دوم", "تعداد T مدار دوم"
+            "تعداد R مدار دوم", "تعداد S مدار دوم", "تعداد T مدار دوم",
+            "طول جغرافیایی", "عرض جغرافیایی"
         ]
         self.column_names = [
             "line_name", "tower_number", "tower_structure", "tower_type", "base_type",
@@ -528,7 +564,8 @@ class TowersWindow(QWidget):
             "insulator_type_c1_r", "insulator_type_c1_s", "insulator_type_c1_t",
             "insulator_type_c2_r", "insulator_type_c2_s", "insulator_type_c2_t",
             "insulator_count_c1_r", "insulator_count_c1_s", "insulator_count_c1_t",
-            "insulator_count_c2_r", "insulator_count_c2_s", "insulator_count_c2_t"
+            "insulator_count_c2_r", "insulator_count_c2_s", "insulator_count_c2_t",
+            "longitude", "latitude"
         ]
 
         # Toolbar
@@ -613,7 +650,7 @@ class TowersWindow(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(21)
+        self.table.setColumnCount(23)
         self.table.setHorizontalHeaderLabels(self.original_headers)
         self.table.setFont(QFont("Vazir", 12))
         self.table.setStyleSheet("""
@@ -702,7 +739,8 @@ class TowersWindow(QWidget):
                        insulator_type_c1_r, insulator_type_c1_s, insulator_type_c1_t,
                        insulator_type_c2_r, insulator_type_c2_s, insulator_type_c2_t,
                        insulator_count_c1_r, insulator_count_c1_s, insulator_count_c1_t,
-                       insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t
+                       insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t,
+                       longitude, latitude
                 FROM towers
             """
             params = []
@@ -786,7 +824,8 @@ class TowersWindow(QWidget):
                         tower_data['insulator_type_c2_s'], tower_data['insulator_type_c2_t'],
                         tower_data['insulator_count_c1_r'], tower_data['insulator_count_c1_s'],
                         tower_data['insulator_count_c1_t'], tower_data['insulator_count_c2_r'],
-                        tower_data['insulator_count_c2_s'], tower_data['insulator_count_c2_t']
+                        tower_data['insulator_count_c2_s'], tower_data['insulator_count_c2_t'],
+                        tower_data['longitude'], tower_data['latitude']
                     )
                 )
                 self.load_table()
@@ -844,7 +883,7 @@ class TowersWindow(QWidget):
                                       insulator_type_c1_t=?, insulator_type_c2_r=?, insulator_type_c2_s=?, 
                                       insulator_type_c2_t=?, insulator_count_c1_r=?, insulator_count_c1_s=?, 
                                       insulator_count_c1_t=?, insulator_count_c2_r=?, insulator_count_c2_s=?, 
-                                      insulator_count_c2_t=?
+                                      insulator_count_c2_t=?, longitude=?, latitude=?
                     WHERE id=?
                     """,
                     (
@@ -857,6 +896,7 @@ class TowersWindow(QWidget):
                         tower_data['insulator_count_c1_r'], tower_data['insulator_count_c1_s'],
                         tower_data['insulator_count_c1_t'], tower_data['insulator_count_c2_r'],
                         tower_data['insulator_count_c2_s'], tower_data['insulator_count_c2_t'],
+                        tower_data['longitude'], tower_data['latitude'],
                         tower_data['id']
                     )
                 )
@@ -1006,8 +1046,9 @@ class TowersWindow(QWidget):
                                     insulator_type_c1_r, insulator_type_c1_s, insulator_type_c1_t,
                                     insulator_type_c2_r, insulator_type_c2_s, insulator_type_c2_t,
                                     insulator_count_c1_r, insulator_count_c1_s, insulator_count_c1_t,
-                                    insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t,
+                                    longitude, latitude)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                     (
                         line_name,
@@ -1030,7 +1071,9 @@ class TowersWindow(QWidget):
                         insulator_count_c1_t,
                         insulator_count_c2_r,
                         insulator_count_c2_s,
-                        insulator_count_c2_t
+                        insulator_count_c2_t,
+                        str(row["طول جغرافیایی"]) if pd.notna(row["طول جغرافیایی"]) else None,
+                        str(row["عرض جغرافیایی"]) if pd.notna(row["عرض جغرافیایی"]) else None
                     )
                 )
                 inserted_count += 1

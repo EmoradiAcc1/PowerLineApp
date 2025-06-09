@@ -30,15 +30,12 @@ class MainWindow(QMainWindow):
         else:
             font_family = font_db.applicationFontFamilies(font_id)[0]
         self.default_font = QFont(font_family, 12)
-        QApplication.setFont(self.default_font)
-
-        # Main widget and layout
+        QApplication.setFont(self.default_font)        # Main widget and layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
         self.layout.setContentsMargins(10, 10, 10, 10)
-
-        # Create menu bar (RTL)
+        self.layout.setSpacing(10)# Create menu bar (RTL)
         self.menu_bar = QMenuBar()
         self.menu_bar.setLayoutDirection(Qt.RightToLeft)
         self.menu_bar.setFont(QFont(font_family, 12))
@@ -63,14 +60,8 @@ class MainWindow(QMainWindow):
                 background-color: #e0e0e0;
             }
         """)
-        # --- پایان تغییر ۲ ---
 
         self.layout.addWidget(self.menu_bar)
-
-        # --- شروع تغییر ۳ ---
-        # اضافه کردن یک فاصله ثابت ۱۰ پیکسلی زیر منو
-        self.layout.addSpacerItem(QSpacerItem(10, 10, QSizePolicy.Minimum, QSizePolicy.Fixed))
-        # --- پایان تغییر ۳ ---
 
         # Menu actions
         self.home_action = QAction("صفحه اصلی", self)
@@ -78,6 +69,7 @@ class MainWindow(QMainWindow):
         self.teams_action = QAction("پرسنل پیمانکار", self)
         self.towers_action = QAction("اطلاعات دکل‌ها", self)
         self.settlement_action = QAction("تسویه حساب جنسی", self)
+        # حذف گزینه شکالات خط
 
         # Add actions to menu bar
         self.menu_bar.addAction(self.home_action)
@@ -85,6 +77,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.addAction(self.teams_action)
         self.menu_bar.addAction(self.towers_action)
         self.menu_bar.addAction(self.settlement_action)
+        # حذف اتصال و متد مربوط به شکالات خط
 
         # Connect actions to functions
         self.home_action.triggered.connect(self.open_home_window)
@@ -92,6 +85,7 @@ class MainWindow(QMainWindow):
         self.teams_action.triggered.connect(self.open_teams_window)
         self.towers_action.triggered.connect(self.open_towers_window)
         self.settlement_action.triggered.connect(self.open_settlement_window)
+        # حذف اتصال و متد مربوط به شکالات خط
 
         # Current window widget
         self.current_window = None

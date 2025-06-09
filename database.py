@@ -1,19 +1,40 @@
 import sqlite3
+import logging
+
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Database:
     _instance = None
+    _db_path = 'power_lines.db'
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Database, cls).__new__(cls)
-            cls._instance.conn = sqlite3.connect('power_lines.db', check_same_thread=False)
-            cls._instance.cursor = cls._instance.conn.cursor()
-            cls._instance.create_tables()
+            # اتصال اولیه برای ایجاد جداول
+            try:
+                with sqlite3.connect(cls._db_path) as conn:
+                    cursor = conn.cursor()
+                    cls._instance.create_tables(cursor)
+                    conn.commit()
+                logging.info("Database tables checked/created successfully.")
+            except sqlite3.Error as e:
+                logging.error(f"Failed to create/check tables: {e}")
+                raise
         return cls._instance
 
-    def create_tables(self):
-        # Create lines table if not exists
-        self.cursor.execute('''
+    def _get_connection(self):
+        """یک اتصال جدید به پایگاه داده برمی‌گرداند."""
+        try:
+            conn = sqlite3.connect(self._db_path, check_same_thread=False)
+            return conn
+        except sqlite3.Error as e:
+            logging.error(f"Database connection failed: {e}")
+            raise
+
+    def create_tables(self, cursor):
+        """جداول را در صورت عدم وجود ایجاد می‌کند."""
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS lines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 line_code TEXT NOT NULL UNIQUE,
@@ -36,10 +57,7 @@ class Database:
                 bundle_count TEXT
             )
         ''')
-        self.conn.commit()
-
-        # Create teams table if not exists
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS teams (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 national_code TEXT,
@@ -52,10 +70,7 @@ class Database:
                 team_leader TEXT NOT NULL
             )
         ''')
-        self.conn.commit()
-
-        # Create towers table if not exists
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS towers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 line_name TEXT NOT NULL,
@@ -80,27 +95,44 @@ class Database:
                 insulator_count_c2_s TEXT,
                 insulator_count_c2_t TEXT,
                 FOREIGN KEY (line_name) REFERENCES lines(line_name) ON DELETE CASCADE,
-                UNIQUE(line_name, tower_number)
-            )
+                UNIQUE(line_name, tower_number)            )
         ''')
-        self.conn.commit()
+        
+        # Add longitude and latitude columns if they don't exist
+        try:
+            cursor.execute('ALTER TABLE towers ADD COLUMN longitude REAL')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+            
+        try:
+            cursor.execute('ALTER TABLE towers ADD COLUMN latitude REAL')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     def execute_query(self, query, params=()):
+        """یک کوئری اجرا کرده و تغییرات را ثبت می‌کند (برای INSERT, UPDATE, DELETE)."""
         try:
-            self.cursor.execute(query, params)
-            self.conn.commit()
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                conn.commit()
+                logging.debug(f"Executed query: {query}")
         except sqlite3.Error as e:
+            logging.error(f"Query failed: {query} - {e}")
             raise Exception(f"Database error: {str(e)}")
 
     def fetch_all(self, query, params=()):
+        """تمام نتایج یک کوئری SELECT را برمی‌گرداند."""
         try:
-            self.cursor.execute(query, params)
-            return self.cursor.fetchall()
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                return cursor.fetchall()
         except sqlite3.Error as e:
+            logging.error(f"Fetch failed: {query} - {e}")
             raise Exception(f"Database error: {str(e)}")
 
     def close(self):
-        self.conn.close()
-
-    def __del__(self):
-        pass  # Avoid closing connection since it's shared
+        # این متد دیگر نیازی به کاری ندارد چون اتصال در هر عملیات باز و بسته می‌شود.
+        logging.info("Database instance is being cleaned up.")
+        pass
