@@ -1,0 +1,156 @@
+/* استایل‌های مشترک برای هر دو TeamsWindow و TowersWindow */
+QWidget {
+    background-color: #f0f0f0;
+}
+
+QToolBar {
+    background-color: #e0e0e0;
+    padding: 5px;
+    spacing: 8px;
+    border-radius: 8px;
+}
+
+QToolButton {
+    margin: 2px;
+    direction: ltr;
+    background-color: transparent !important;
+    border: none;
+    padding: 2px;
+    cursor: pointer !important;
+}
+
+QToolButton:flat {
+    background: transparent;
+}
+
+QToolButton:hover {
+    background-color: #d0d0d0;
+    cursor: pointer !important;
+    border-radius: 5px;
+    padding: 5px;
+}
+
+/* استایل خاص برای دکمه صفحه اصلی */
+QToolButton#home_action {
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+QToolSeparator {
+    color: #333333;
+    font-weight: bold;
+    width: 10px;
+}
+
+QLineEdit {
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: white;
+    width: 300px;
+}
+
+QLineEdit:focus {
+    border: 1px solid #4CAF50;
+}
+
+QTableWidget {
+    border: 1px solid #ccc;
+    background-color: white;
+}
+
+QMenu {
+    background-color: white;
+    border: 1px solid #ccc;
+    direction: rtl;
+}
+
+QMenu::item {
+    padding: 5px 20px;
+    padding-right: 30px;
+    margin-right: 10px;
+    color: black;
+    direction: rtl;
+    text-align: right;
+}
+
+QMenu::item:selected {
+    background-color: #d0d0d0;
+    color: black;
+}
+
+/* استایل‌های خاص برای FilterPopover */
+FilterPopover {
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+FilterPopover QLineEdit {
+    padding: 3px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: white;
+}
+
+/* استایل‌های خاص برای TeamInputDialog */
+TeamInputDialog QLineEdit {
+    padding: 5px;
+    border: 1px solid #ccc;
+    background-color: white;
+    border-radius: 5px;
+}
+
+TeamInputDialog QPushButton#save_button {
+    padding: 8px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+}
+
+TeamInputDialog QPushButton#cancel_button {
+    padding: 8px 20px;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 5px;
+}
+
+/* استایل‌های خاص برای TowersInputDialog */
+TowersInputDialog QLineEdit, TowersInputDialog QComboBox {
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: white;
+}
+
+TowersInputDialog QGroupBox {
+    font: 12pt "Vazir";
+}
+
+TowersInputDialog QPushButton#save_button {
+    padding: 5px;
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 6px;
+}
+
+TowersInputDialog QPushButton#cancel_button {
+    padding: 5px;
+    background-color: #f44336;
+    color: white;
+    border-radius: 6px;
+}
+
+/* استایل‌های خاص برای QComboBox در TowersInputDialog */
+TowersInputDialog QComboBox {
+    text-align: right;
+}
+
+TowersInputDialog QComboBox QAbstractItemView {
+    padding-right: 5px;
+    direction: rtl;
+}

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenStreetMap with Leaflet</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* جلوگیری از اسکرول ناخواسته */
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        /* این بخش برای تغییر اشاره‌گر نقشه به حالت عادی اضافه شده است */
+        .leaflet-container, .leaflet-grab, .leaflet-interactive {
+            cursor: default !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // ایجاد نقشه با مختصات اولیه (کرمانشاه)
+        var map = L.map('map').setView([34.3142, 47.0650], 10);
+
+        // افزودن لایه OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // نمونه دکل‌های فرضی (با مختصات در استان کرمانشاه)
+        var towers = [
+            { name: "دکل ۱ - کرمانشاه", lat: 34.3142, lng: 47.0650 },
+            { name: "دکل ۲ - اسلام‌آباد غرب", lat: 34.1109, lng: 46.5273 },
+            { name: "دکل ۳ - جوانرود", lat: 34.8067, lng: 46.5172 },
+            { name: "دکل ۴ - پاوه", lat: 35.0434, lng: 46.3563 }
+        ];
+
+        // افزودن مارکر برای هر دکل
+        towers.forEach(function(tower) {
+            L.marker([tower.lat, tower.lng])
+                .addTo(map)
+                .bindPopup("<b>" + tower.name + "</b><br>مختصات: " + tower.lat + ", " + tower.lng);
+        });
+
+        // نمونه مسیرهای سیم (خطوط بین دکل‌ها)
+        var lines = [
+            [[34.3142, 47.0650], [34.1109, 46.5273]], // دکل ۱ به دکل ۲
+            [[34.1109, 46.5273], [34.8067, 46.5172]], // دکل ۲ به دکل ۳
+            [[34.8067, 46.5172], [35.0434, 46.3563]], // دکل ۳ به دکل ۴
+            [[34.3142, 47.0650], [35.0434, 46.3563]]  // دکل ۱ به دکل ۴
+        ];
+
+        // افزودن خطوط برای مسیرهای سیم
+        lines.forEach(function(line) {
+            L.polyline(line, {
+                color: 'blue',
+                weight: 3,
+                opacity: 0.7
+            }).addTo(map);
+        });
+    </script>
+</body>
+</html>
