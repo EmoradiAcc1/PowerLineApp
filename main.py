@@ -1,5 +1,9 @@
+# emoradiacc1/powerlineapp/PowerLineApp-fdbcef7fc87678177f786819d0b9aeed5ed41779/main.py
+
 import sys
-from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout, QWidget, QMenuBar, QAction, QMessageBox
+# --- شروع تغییر ۱ ---
+from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout, QWidget, QMenuBar, QAction, QMessageBox, QSpacerItem, QSizePolicy
+# --- پایان تغییر ۱ ---
 from PyQt5.QtGui import QFontDatabase, QFont, QCursor
 from PyQt5.QtCore import Qt
 from lines_window import LinesWindow
@@ -38,8 +42,35 @@ class MainWindow(QMainWindow):
         self.menu_bar = QMenuBar()
         self.menu_bar.setLayoutDirection(Qt.RightToLeft)
         self.menu_bar.setFont(QFont(font_family, 12))
-        self.menu_bar.setCursor(Qt.PointingHandCursor)  # <-- این خط برای تغییر شکل اشاره‌گر اضافه شده است
+        self.menu_bar.setCursor(Qt.PointingHandCursor)
+        
+        # --- شروع تغییر ۲ ---
+        self.menu_bar.setStyleSheet("""
+            QMenuBar {
+                background-color: white;
+                padding: 5px;
+                border-radius: 5px;
+            }
+            QMenuBar::item {
+                padding: 8px 15px;
+                background-color: transparent;
+                border-radius: 4px;
+            }
+            QMenuBar::item:selected {
+                background-color: #f0f0f0;
+            }
+            QMenuBar::item:pressed {
+                background-color: #e0e0e0;
+            }
+        """)
+        # --- پایان تغییر ۲ ---
+
         self.layout.addWidget(self.menu_bar)
+
+        # --- شروع تغییر ۳ ---
+        # اضافه کردن یک فاصله ثابت ۱۰ پیکسلی زیر منو
+        self.layout.addSpacerItem(QSpacerItem(10, 10, QSizePolicy.Minimum, QSizePolicy.Fixed))
+        # --- پایان تغییر ۳ ---
 
         # Menu actions
         self.home_action = QAction("صفحه اصلی", self)
@@ -84,6 +115,8 @@ class MainWindow(QMainWindow):
         try:
             self.clear_current_window()
             self.current_window = LinesWindow(self.central_widget)
+            self.current_window.back_action.triggered.disconnect()
+            self.current_window.back_action.triggered.connect(self.open_home_window)
             self.layout.addWidget(self.current_window)
             self.current_window.show()
         except Exception as e:
@@ -94,6 +127,8 @@ class MainWindow(QMainWindow):
         try:
             self.clear_current_window()
             self.current_window = TeamsWindow(self.central_widget)
+            self.current_window.back_action.triggered.disconnect()
+            self.current_window.back_action.triggered.connect(self.open_home_window)
             self.layout.addWidget(self.current_window)
             self.current_window.show()
         except Exception as e:
@@ -104,6 +139,8 @@ class MainWindow(QMainWindow):
         try:
             self.clear_current_window()
             self.current_window = TowersWindow(self.central_widget)
+            self.current_window.back_action.triggered.disconnect()
+            self.current_window.back_action.triggered.connect(self.open_home_window)
             self.layout.addWidget(self.current_window)
             self.current_window.show()
         except Exception as e:
@@ -131,7 +168,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         try:
             db = Database()
-            db.close()  # Close database connection
+            db.close()
             event.accept()
         except Exception as e:
             print(f"Error closing database: {str(e)}")

@@ -1,3 +1,5 @@
+# emoradiacc1/powerlineapp/PowerLineApp-fdbcef7fc87678177f786819d0b9aeed5ed41779/map_window.py
+
 import os
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -10,12 +12,18 @@ class MapWindow(QWidget):
         
         # چیدمان اصلی بدون حاشیه
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)  # حذف حاشیه‌ها
-        self.layout.setSpacing(0)  # حذف فاصله بین ویجت‌ها
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
 
         # ویجت WebEngine برای نمایش نقشه
         self.web_view = QWebEngineView()
-        self.layout.addWidget(self.web_view, stretch=1)  # گسترش کامل ویجت
+
+        # --- شروع تغییر ---
+        # اضافه کردن پخ (گوشه‌های گرد) به ویجت نمایش‌دهنده نقشه
+        self.web_view.setStyleSheet("border-radius: 8px;")
+        # --- پایان تغییر ---
+
+        self.layout.addWidget(self.web_view, stretch=1)
 
         # لود فایل HTML نقشه
         html_path = os.path.join(os.getcwd(), "map.html")
