@@ -10,9 +10,6 @@ class MapWindow(QWidget):
         super().__init__(parent)
         self.setLayoutDirection(Qt.RightToLeft)
         
-        # اعمال استایل به این ویجت (پنجره دربرگیرنده) برای داشتن گوشه‌های گرد
-        self.setStyleSheet("background-color: white; border-radius: 8px;")
-
         # چیدمان اصلی بدون حاشیه
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -21,7 +18,11 @@ class MapWindow(QWidget):
         # ویجت WebEngine برای نمایش نقشه
         self.web_view = QWebEngineView()
 
-        # به صورت خودکار گوشه‌های این ویجت توسط والد خود گرد می‌شود
+        # --- شروع تغییر ---
+        # اضافه کردن پخ (گوشه‌های گرد) به ویجت نمایش‌دهنده نقشه
+        self.web_view.setStyleSheet("border-radius: 8px;")
+        # --- پایان تغییر ---
+
         self.layout.addWidget(self.web_view, stretch=1)
 
         # لود فایل HTML نقشه
