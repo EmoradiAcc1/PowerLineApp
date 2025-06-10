@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QToolBar, QAction, QLineEdit, QLabel, QMessageBox, QStyle, QDialog, QFormLayout, QPushButton, QFileDialog, QHeaderView, QSizePolicy, QMenu, QApplication, QSpacerItem, QComboBox, QGroupBox, QScrollArea
 from PyQt5.QtCore import Qt, QEvent, QPoint
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont, QIcon, QColor
 from database import Database
 import csv
 import re
@@ -10,6 +10,37 @@ import traceback
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class CustomComboBox(QComboBox):
+    def wheelEvent(self, event):
+        event.ignore()
+        
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # استفاده از popup برای باز شدن با کلیک
+
+        self.view().window().setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
+        self.setStyleSheet("""
+            QComboBox {
+                text-align: left;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: url(down_arrow.png);
+                width: 12px;
+                height: 12px;
+            }
+            QComboBox QAbstractItemView {
+                text-align: left;
+            }
+        """)
+
+        
+    def mousePressEvent(self, event):
+        # اجازه باز شدن کمبوباکس با کلیک روی هر قسمت
+        self.showPopup()
 
 # -----------------------------------------------
 # Filter Popover: A small widget for column-specific filtering
@@ -71,8 +102,8 @@ class TowersInputDialog(QDialog):
         self.scroll.setWidgetResizable(True)
         self.content_widget = QWidget()
         self.main_layout = QVBoxLayout(self.content_widget)
-        self.main_layout.setContentsMargins(15, 15, 15, 15)
-        self.main_layout.setSpacing(15)
+        self.main_layout.setContentsMargins(10, 10, 10, 10)  # کاهش حاشیه‌ها
+        self.main_layout.setSpacing(8)  # کاهش فاصله بین المان‌ها
         self.scroll.setWidget(self.content_widget)
         self.scroll_layout = QVBoxLayout(self)
         self.scroll_layout.addWidget(self.scroll)
@@ -80,19 +111,20 @@ class TowersInputDialog(QDialog):
         # سکشن اطلاعات پایه
         self.section1 = QGroupBox("اطلاعات پایه")
         self.section1.setFont(self.font)
+        self.section1.setStyleSheet("QGroupBox { color: rgb(0, 122, 204); }")
         self.section1_layout = QVBoxLayout()
-        self.section1_layout.setContentsMargins(20, 10, 20, 10)
-        self.section1_layout.setSpacing(15)
+        self.section1_layout.setContentsMargins(10, 10, 10, 10)  # کاهش حاشیه‌ها
+        self.section1_layout.setSpacing(8)  # کاهش فاصله بین ردیف‌ها
         self.section1.setLayout(self.section1_layout)
 
         # عرض ثابت برای ویجت‌ها
-        dialog_width = 800
-        label_width = 100  # عرض ثابت برای لیبل‌ها (برای ترازبندی)
-        widget_width = 4*(dialog_width - 2 * label_width - 3 * 20) // 10  # حدود 260 پیکسل برای هر QLineEdit
-        combo_width = 2 * widget_width  # حدود 520 پیکسل برای QComboBox
+        dialog_width = 750  # افزایش عرض دیالوگ
+        label_width = 120  # عرض ثابت برای لیبل‌ها
+        widget_width = int((dialog_width - 2 * label_width - 3 * 20) * 0.45)  # کاهش جزئی عرض تکست باکس‌ها
+        combo_width = int(widget_width * 1.3)  # کاهش جزئی عرض کومبو باکس‌ها
 
         # ردیف اول: فقط نام خط
-        self.line_name = QComboBox()
+        self.line_name = CustomComboBox()
         self.line_name.setFont(self.font)
         self.line_name.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
         self.line_name.setFixedWidth(combo_width)
@@ -153,6 +185,7 @@ class TowersInputDialog(QDialog):
         # سکشن ارتفاع سرقالب‌ها
         self.section2 = QGroupBox("ارتفاع سرقالب‌ها")
         self.section2.setFont(self.font)
+        self.section2.setStyleSheet("QGroupBox { color: rgb(0, 122, 204); }")
         self.section2_layout = QVBoxLayout()
         self.section2_layout.setContentsMargins(10, 10, 10, 10)
         self.section2_layout.setSpacing(8)
@@ -197,18 +230,19 @@ class TowersInputDialog(QDialog):
         # سکشن نوع مقره‌ها
         self.section3 = QGroupBox("نوع مقره‌ها")
         self.section3.setFont(self.font)
+        self.section3.setStyleSheet("QGroupBox { color: rgb(0, 122, 204); }")
         self.section3_layout = QVBoxLayout()
         self.section3_layout.setContentsMargins(10, 10, 10, 10)
         self.section3_layout.setSpacing(8)
         self.section3.setLayout(self.section3_layout)
 
         # ردیف اول: نوع مقره R مدار اول (راست) و R مدار دوم (چپ)
-        self.insulator_type_c1_r = QComboBox()
+        self.insulator_type_c1_r = CustomComboBox()
         self.insulator_type_c1_r.setFont(self.font)
         self.insulator_type_c1_r.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
         self.insulator_type_c1_r.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
         self.insulator_type_c1_r.setFixedWidth(widget_width)
-        self.insulator_type_c2_r = QComboBox()
+        self.insulator_type_c2_r = CustomComboBox()
         self.insulator_type_c2_r.setFont(self.font)
         self.insulator_type_c2_r.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
         self.insulator_type_c2_r.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
@@ -222,12 +256,12 @@ class TowersInputDialog(QDialog):
         self.section3_layout.addLayout(row6)
 
         # ردیف دوم: نوع مقره S مدار اول (راست) و S مدار دوم (چپ)
-        self.insulator_type_c1_s = QComboBox()
+        self.insulator_type_c1_s = CustomComboBox()
         self.insulator_type_c1_s.setFont(self.font)
         self.insulator_type_c1_s.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
         self.insulator_type_c1_s.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
         self.insulator_type_c1_s.setFixedWidth(widget_width)
-        self.insulator_type_c2_s = QComboBox()
+        self.insulator_type_c2_s = CustomComboBox()
         self.insulator_type_c2_s.setFont(self.font)
         self.insulator_type_c2_s.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
         self.insulator_type_c2_s.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
@@ -241,12 +275,12 @@ class TowersInputDialog(QDialog):
         self.section3_layout.addLayout(row7)
 
         # ردیف سوم: نوع مقره T مدار اول (راست) و T مدار دوم (چپ)
-        self.insulator_type_c1_t = QComboBox()
+        self.insulator_type_c1_t = CustomComboBox()
         self.insulator_type_c1_t.setFont(self.font)
         self.insulator_type_c1_t.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
         self.insulator_type_c1_t.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
         self.insulator_type_c1_t.setFixedWidth(widget_width)
-        self.insulator_type_c2_t = QComboBox()
+        self.insulator_type_c2_t = CustomComboBox()
         self.insulator_type_c2_t.setFont(self.font)
         self.insulator_type_c2_t.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
         self.insulator_type_c2_t.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
@@ -264,6 +298,7 @@ class TowersInputDialog(QDialog):
         # سکشن تعداد مقره‌ها
         self.section4 = QGroupBox("تعداد مقره‌ها")
         self.section4.setFont(self.font)
+        self.section4.setStyleSheet("QGroupBox { color: rgb(0, 122, 204); }")
         self.section4_layout = QVBoxLayout()
         self.section4_layout.setContentsMargins(10, 10, 10, 10)
         self.section4_layout.setSpacing(8)
@@ -319,6 +354,7 @@ class TowersInputDialog(QDialog):
         # سکشن موقعیت جغرافیایی
         self.section5 = QGroupBox("موقعیت جغرافیایی")
         self.section5.setFont(self.font)
+        self.section5.setStyleSheet("QGroupBox { color: rgb(0, 122, 204); }")
         self.section5_layout = QVBoxLayout()
         self.section5_layout.setContentsMargins(10, 10, 10, 10)
         self.section5_layout.setSpacing(8)
@@ -479,10 +515,21 @@ class TowersInputDialog(QDialog):
             return False, "تعداد مقره S مدار دوم باید عدد باشد!"
         if self.insulator_count_c2_t.text() and not self.insulator_count_c2_t.text().isdigit():
             return False, "تعداد مقره T مدار دوم باید عدد باشد!"
-        if self.longitude.text() and not re.match(r"^-?\d+(\.\d+)?$", self.longitude.text()):
-            return False, "طول جغرافیایی نامعتبر است!"
-        if self.latitude.text() and not re.match(r"^-?\d+(\.\d+)?$", self.latitude.text()):
-            return False, "عرض جغرافیایی نامعتبر است!"
+        if self.longitude.text():
+            try:
+                lon = float(self.longitude.text())
+                if lon < -180 or lon > 180:
+                    return False, "طول جغرافیایی باید بین -180 و 180 درجه باشد!"
+            except ValueError:
+                return False, "طول جغرافیایی باید یک عدد معتبر باشد!"
+
+        if self.latitude.text():
+            try:
+                lat = float(self.latitude.text())
+                if lat < -90 or lat > 90:
+                    return False, "عرض جغرافیایی باید بین -90 و 90 درجه باشد!"
+            except ValueError:
+                return False, "عرض جغرافیایی باید یک عدد معتبر باشد!"
         existing_towers = self.db.fetch_all(
             "SELECT tower_number FROM towers WHERE line_name = ? AND id != ?",
             (self.line_name.currentText(), self.current_id or -1)
@@ -528,8 +575,8 @@ class TowersInputDialog(QDialog):
             'insulator_count_c2_r': self.insulator_count_c2_r.text(),
             'insulator_count_c2_s': self.insulator_count_c2_s.text(),
             'insulator_count_c2_t': self.insulator_count_c2_t.text(),
-            'longitude': self.longitude.text(),
-            'latitude': self.latitude.text(),
+            'longitude': float(self.longitude.text()) if self.longitude.text() else None,
+            'latitude': float(self.latitude.text()) if self.latitude.text() else None,
             'id': self.current_id
         }
         self.accept()
@@ -770,10 +817,13 @@ class TowersWindow(QWidget):
             for row_idx, row_data in enumerate(rows):
                 for col_idx, data in enumerate(row_data[1:], start=0):
                     data = str(data) if data is not None else ""
-                    if col_idx in [5, 6, 7, 8]:
+                    if col_idx in [5, 6, 7, 8] or col_idx in [21, 22]:  # ارتفاع پایه‌ها و مختصات جغرافیایی
                         try:
                             num = float(data)
-                            data = str(int(num)) if num.is_integer() else str(num).rstrip('0').rstrip('.')
+                            if col_idx in [21, 22]:  # برای طول و عرض جغرافیایی، 6 رقم اعشار نمایش داده شود
+                                data = f"{num:.6f}"
+                            else:  # برای ارتفاع پایه‌ها، مثل قبل
+                                data = str(int(num)) if num.is_integer() else str(num).rstrip('0').rstrip('.')
                         except (ValueError, TypeError):
                             pass
                     item = QTableWidgetItem(data)
@@ -812,8 +862,9 @@ class TowersWindow(QWidget):
                                         insulator_type_c1_r, insulator_type_c1_s, insulator_type_c1_t,
                                         insulator_type_c2_r, insulator_type_c2_s, insulator_type_c2_t,
                                         insulator_count_c1_r, insulator_count_c1_s, insulator_count_c1_t,
-                                        insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t,
+                                        longitude, latitude)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         tower_data['line_name'], tower_data['tower_number'], tower_data['tower_structure'],
@@ -848,29 +899,48 @@ class TowersWindow(QWidget):
                 QMessageBox.critical(self, "خطا", "دکل موردنظر یافت نشد!")
                 return
             current_id = result[0][0]
+            # Get all tower data from database instead of table
+            result = self.db.fetch_all("""
+                SELECT line_name, tower_number, tower_structure, tower_type, base_type,
+                       height_leg_a, height_leg_b, height_leg_c, height_leg_d,
+                       insulator_type_c1_r, insulator_type_c1_s, insulator_type_c1_t,
+                       insulator_type_c2_r, insulator_type_c2_s, insulator_type_c2_t,
+                       insulator_count_c1_r, insulator_count_c1_s, insulator_count_c1_t,
+                       insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t,
+                       longitude, latitude
+                FROM towers WHERE id=?
+            """, (current_id,))
+            
+            if not result:
+                QMessageBox.critical(self, "خطا", "دکل موردنظر یافت نشد!")
+                return
+                
+            data = result[0]
             tower_data = {
                 'id': current_id,
-                'line_name': line_name,
-                'tower_number': tower_number,
-                'tower_structure': self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                'tower_type': self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-                'base_type': self.table.item(row, 4).text() if self.table.item(row, 4) else "",
-                'height_leg_a': self.table.item(row, 5).text() if self.table.item(row, 5) else "",
-                'height_leg_b': self.table.item(row, 6).text() if self.table.item(row, 6) else "",
-                'height_leg_c': self.table.item(row, 7).text() if self.table.item(row, 7) else "",
-                'height_leg_d': self.table.item(row, 8).text() if self.table.item(row, 8) else "",
-                'insulator_type_c1_r': self.table.item(row, 9).text() if self.table.item(row, 9) else "",
-                'insulator_type_c1_s': self.table.item(row, 10).text() if self.table.item(row, 10) else "",
-                'insulator_type_c1_t': self.table.item(row, 11).text() if self.table.item(row, 11) else "",
-                'insulator_type_c2_r': self.table.item(row, 12).text() if self.table.item(row, 12) else "",
-                'insulator_type_c2_s': self.table.item(row, 13).text() if self.table.item(row, 13) else "",
-                'insulator_type_c2_t': self.table.item(row, 14).text() if self.table.item(row, 14) else "",
-                'insulator_count_c1_r': self.table.item(row, 15).text() if self.table.item(row, 15) else "",
-                'insulator_count_c1_s': self.table.item(row, 16).text() if self.table.item(row, 16) else "",
-                'insulator_count_c1_t': self.table.item(row, 17).text() if self.table.item(row, 17) else "",
-                'insulator_count_c2_r': self.table.item(row, 18).text() if self.table.item(row, 18) else "",
-                'insulator_count_c2_s': self.table.item(row, 19).text() if self.table.item(row, 19) else "",
-                'insulator_count_c2_t': self.table.item(row, 20).text() if self.table.item(row, 20) else ""
+                'line_name': data[0],
+                'tower_number': data[1],
+                'tower_structure': data[2] or "",
+                'tower_type': data[3] or "",
+                'base_type': data[4] or "",
+                'height_leg_a': data[5] or "",
+                'height_leg_b': data[6] or "",
+                'height_leg_c': data[7] or "",
+                'height_leg_d': data[8] or "",
+                'insulator_type_c1_r': data[9] or "",
+                'insulator_type_c1_s': data[10] or "",
+                'insulator_type_c1_t': data[11] or "",
+                'insulator_type_c2_r': data[12] or "",
+                'insulator_type_c2_s': data[13] or "",
+                'insulator_type_c2_t': data[14] or "",
+                'insulator_count_c1_r': data[15] or "",
+                'insulator_count_c1_s': data[16] or "",
+                'insulator_count_c1_t': data[17] or "",
+                'insulator_count_c2_r': data[18] or "",
+                'insulator_count_c2_s': data[19] or "",
+                'insulator_count_c2_t': data[20] or "",
+                'longitude': data[21] or "",
+                'latitude': data[22] or ""
             }
             dialog = TowersInputDialog(self, tower_data, is_edit=True)
             if dialog.exec_() == QDialog.Accepted:
