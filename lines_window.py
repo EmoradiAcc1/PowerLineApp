@@ -1,12 +1,19 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QToolBar, QAction, QLineEdit, QHBoxLayout, QLabel, QMessageBox, QStyle, QDialog, QFormLayout, QPushButton, QFileDialog, QHeaderView, QSizePolicy, QMenu, QApplication, QSpacerItem, QComboBox
-from PyQt5.QtCore import Qt, QEvent, QPoint
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
+    QTableWidget, QTableWidgetItem, QMessageBox, QDialog,
+    QToolBar, QAction, QFileDialog, QMenu, QApplication,
+    QSizePolicy, QStyle
+)
+from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QFont, QIcon
 from database import Database
-import csv
-import re
 import pandas as pd
+import os
 import logging
 import traceback
+import openpyxl
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, Alignment, Border, Side
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -223,6 +230,14 @@ class LineInputDialog(QDialog):
         bundle_count_layout.addStretch()
         self.form_layout.addRow(QLabel("تعداد باندل:"), bundle_count_layout)
 
+        self.circuit_count = QLineEdit()
+        self.circuit_count.setFont(font)
+        self.circuit_count.setStyleSheet("padding: 5px; border: 1px solid #ccc; background-color: white; width: 220px; border-radius: 6px;")
+        circuit_count_layout = QHBoxLayout()
+        circuit_count_layout.addWidget(self.circuit_count)
+        circuit_count_layout.addStretch()
+        self.form_layout.addRow(QLabel("تعداد مدار:"), circuit_count_layout)
+
         if line_data:
             self.line_code.setText(str(line_data.get('line_code', '')))
             self.voltage_level.setText(str(line_data.get('voltage_level', '')))
@@ -247,6 +262,7 @@ class LineInputDialog(QDialog):
             self.wire_type.setText(str(line_data.get('wire_type', '')))
             self.tower_type.setText(str(line_data.get('tower_type', '')))
             self.bundle_count.setText(str(line_data.get('bundle_count', '')))
+            self.circuit_count.setText(str(line_data.get('circuit_count', '')))
 
         self.layout.addLayout(self.form_layout)
         self.layout.addSpacerItem(QSpacerItem(0, 15, QSizePolicy.Minimum, QSizePolicy.Fixed))
@@ -303,6 +319,8 @@ class LineInputDialog(QDialog):
             return False, "سال بهره‌برداری باید عدد ۴ رقمی باشد!"
         if self.bundle_count.text() and not self.bundle_count.text().isdigit():
             return False, "تعداد باندل باید عدد باشد!"
+        if self.circuit_count.text() and not self.circuit_count.text().isdigit():
+            return False, "تعداد مدار باید عدد باشد!"
         existing_codes = self.db.fetch_all("SELECT line_code FROM lines WHERE id != ?", (self.current_id or -1,))
         if self.line_code.text() in [code[0] for code in existing_codes]:
             return False, "کد خط باید یکتا باشد!"
@@ -333,6 +351,7 @@ class LineInputDialog(QDialog):
             'suspension_towers': self.suspension_towers.text(),
             'line_length': format_number(self.line_length.text()),
             'circuit_length': format_number(self.circuit_length.text()),
+            'circuit_count': self.circuit_count.text(),
             'plain_area': self.plain_area.text(),
             'semi_mountainous': self.semi_mountainous.text(),
             'rough_terrain': self.rough_terrain.text(),
@@ -357,21 +376,22 @@ class LinesWindow(QWidget):
         self.layout.setContentsMargins(20, 20, 20, 20)
         self.layout.setSpacing(10)
         self.setLayoutDirection(Qt.RightToLeft)
-        self.setStyleSheet("background-color: #f0f0f0;")
-
-        # Column filters
+        self.setStyleSheet("background-color: #f0f0f0;")        # Column filters
         self.column_filters = {}
+        
+        # Headers setup
         self.original_headers = [
-            "کد خط", "سطح ولتاژ", "نام خط", "کد دیسپاچینگ", "تعداد کل دکل‌ها",
-            "دکل‌های کششی", "دکل‌های آویزه", "طول خط", "طول مدار",
-            "دشت", "نیمه کوهستانی", "صعب العبور", "ناظر", "سرپرست اکیپ",
-            "سال بهره‌برداری", "نوع سیم", "نوع دکل", "تعداد باندل"
+            "کد خط", "سطح ولتاژ", "نام خط", "کد دیسپاچینگ", "تعداد مدار",
+            "تعداد باندل", "طول خط", "طول مدار", "تعداد کل دکل‌ها",
+            "آویز", "زاویه", "دشت", "نیمه کوهستانی", "صعب العبور",
+            "کارشناس خط", "نوع دکل", "نوع سیم", "سال بهره‌برداری"
         ]
+        
         self.column_names = [
-            "line_code", "voltage_level", "line_name", "dispatch_code", "total_towers",
-            "tension_towers", "suspension_towers", "line_length", "circuit_length",
-            "plain_area", "semi_mountainous", "rough_terrain", "supervisor", "team_leader",
-            "operation_year", "wire_type", "tower_type", "bundle_count"
+            "line_code", "voltage_level", "line_name", "dispatch_code", "circuit_count",
+            "bundle_count", "line_length", "circuit_length", "total_towers",
+            "suspension_towers", "tension_towers", "plain_area", "semi_mountainous", "rough_terrain",
+            "team_leader", "tower_type", "wire_type", "operation_year"
         ]
 
         # Toolbar
@@ -456,7 +476,7 @@ class LinesWindow(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(18)
+        self.table.setColumnCount(19)
         self.table.setHorizontalHeaderLabels(self.original_headers)
         self.table.setFont(QFont("Vazir", 12))
         self.table.setStyleSheet("""
@@ -529,7 +549,7 @@ class LinesWindow(QWidget):
                 if name in self.column_filters and self.column_filters[name]:
                     new_headers[i] = f"{self.original_headers[i]} ▼"
                 else:
-                    new_headers[i] = self.original_headers[i]
+                    new_headers[i] = self.originalHeaders[i]
             self.table.setHorizontalHeaderLabels(new_headers)
             self.load_table()
         except Exception as e:
@@ -540,10 +560,10 @@ class LinesWindow(QWidget):
         try:
             self.table.blockSignals(True)
             query = """
-                SELECT id, line_code, voltage_level, line_name, dispatch_code, total_towers, 
-                       tension_towers, suspension_towers, line_length, circuit_length,
-                       plain_area, semi_mountainous, rough_terrain, supervisor, team_leader,
-                       operation_year, wire_type, tower_type, bundle_count
+                SELECT id, line_code, voltage_level, line_name, dispatch_code, circuit_count,
+                       bundle_count, line_length, circuit_length, total_towers,
+                       suspension_towers, tension_towers, plain_area, semi_mountainous,
+                       rough_terrain, team_leader, tower_type, wire_type, operation_year
                 FROM lines
             """
             params = []
@@ -551,11 +571,11 @@ class LinesWindow(QWidget):
             if global_filter:
                 conditions.append("""
                     (line_code LIKE ? OR voltage_level LIKE ? OR line_name LIKE ? 
-                    OR dispatch_code LIKE ? OR total_towers LIKE ? OR tension_towers LIKE ? 
-                    OR suspension_towers LIKE ? OR line_length LIKE ? OR circuit_length LIKE ?
-                    OR plain_area LIKE ? OR semi_mountainous LIKE ? OR rough_terrain LIKE ?
-                    OR supervisor LIKE ? OR team_leader LIKE ? OR operation_year LIKE ?
-                    OR wire_type LIKE ? OR tower_type LIKE ? OR bundle_count LIKE ?)
+                    OR dispatch_code LIKE ? OR circuit_count LIKE ? OR bundle_count LIKE ?
+                    OR line_length LIKE ? OR circuit_length LIKE ? OR total_towers LIKE ?
+                    OR suspension_towers LIKE ? OR tension_towers LIKE ? OR plain_area LIKE ?
+                    OR semi_mountainous LIKE ? OR rough_terrain LIKE ? OR team_leader LIKE ?
+                    OR tower_type LIKE ? OR wire_type LIKE ? OR operation_year LIKE ?)
                 """)
                 params.extend([f"%{global_filter}%"] * 18)
             for column, filter_text in self.column_filters.items():
@@ -607,19 +627,21 @@ class LinesWindow(QWidget):
             try:
                 self.db.execute_query(
                     """
-                    INSERT INTO lines (line_code, voltage_level, line_name, dispatch_code, total_towers, 
-                                       tension_towers, suspension_towers, line_length, circuit_length,
-                                       plain_area, semi_mountainous, rough_terrain, supervisor, team_leader,
-                                       operation_year, wire_type, tower_type, bundle_count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO lines (line_code, voltage_level, line_name, dispatch_code, circuit_count,
+                                       bundle_count, line_length, circuit_length, total_towers,
+                                       suspension_towers, tension_towers, plain_area, semi_mountainous, rough_terrain,
+                                       supervisor, team_leader, tower_type, wire_type, operation_year)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         line_data['line_code'], line_data['voltage_level'], line_data['line_name'], 
-                        line_data['dispatch_code'], line_data['total_towers'], line_data['tension_towers'], 
-                        line_data['suspension_towers'], line_data['line_length'], line_data['circuit_length'],
-                        line_data['plain_area'], line_data['semi_mountainous'], line_data['rough_terrain'],
-                        line_data['supervisor'], line_data['team_leader'], line_data['operation_year'],
-                        line_data['wire_type'], line_data['tower_type'], line_data['bundle_count']
+                        line_data['dispatch_code'], line_data['circuit_count'],
+                        line_data['bundle_count'], line_data['line_length'], line_data['circuit_length'],
+                        line_data['total_towers'],
+                        line_data['suspension_towers'], line_data['tension_towers'], line_data['plain_area'],
+                        line_data['semi_mountainous'], line_data['rough_terrain'], line_data['supervisor'],
+                        line_data['team_leader'], line_data['tower_type'], line_data['wire_type'],
+                        line_data['operation_year']
                     )
                 )
                 self.load_table()
@@ -629,66 +651,56 @@ class LinesWindow(QWidget):
                 QMessageBox.critical(self, "خطا", f"خطا در افزودن خط: {str(e)}")
 
     def edit_line(self):
-        selected = self.table.selectedItems()
-        if not selected:
-            QMessageBox.warning(self, "خطا", "خطی انتخاب نشده است!")
-            return
-        row = self.table.currentRow()
-        line_code = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
         try:
-            result = self.db.fetch_all("SELECT id FROM lines WHERE line_code=?", (line_code,))
-            if not result:
-                QMessageBox.critical(self, "خطا", "خط موردنظر یافت نشد!")
+            selected_items = self.table.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(self, "هشدار", "لطفاً یک ردیف را برای ویرایش انتخاب کنید.")
                 return
-            current_id = result[0][0]
+
+            selected_row = selected_items[0].row()
+            line_code = self.table.item(selected_row, self.column_names.index("line_code")).text()
+
+            # Get data from input fields
             line_data = {
-                'id': current_id,
-                'line_code': line_code,
-                'voltage_level': self.table.item(row, 1).text() if self.table.item(row, 1) else "",
-                'line_name': self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                'dispatch_code': self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-                'total_towers': self.table.item(row, 4).text() if self.table.item(row, 4) else "",
-                'tension_towers': self.table.item(row, 5).text() if self.table.item(row, 5) else "",
-                'suspension_towers': self.table.item(row, 6).text() if self.table.item(row, 6) else "",
-                'line_length': self.table.item(row, 7).text() if self.table.item(row, 7) else "",
-                'circuit_length': self.table.item(row, 8).text() if self.table.item(row, 8) else "",
-                'plain_area': self.table.item(row, 9).text() if self.table.item(row, 9) else "",
-                'semi_mountainous': self.table.item(row, 10).text() if self.table.item(row, 10) else "",
-                'rough_terrain': self.table.item(row, 11).text() if self.table.item(row, 11) else "",
-                'supervisor': self.table.item(row, 12).text() if self.table.item(row, 12) else "",
-                'team_leader': self.table.item(row, 13).text() if self.table.item(row, 13) else "",
-                'operation_year': self.table.item(row, 14).text() if self.table.item(row, 14) else "",
-                'wire_type': self.table.item(row, 15).text() if self.table.item(row, 15) else "",
-                'tower_type': self.table.item(row, 16).text() if self.table.item(row, 16) else "",
-                'bundle_count': self.table.item(row, 17).text() if self.table.item(row, 17) else ""
+                "voltage_level": self.voltage_level_input.text(),
+                "line_name": self.line_name_input.text(),
+                "dispatch_code": self.dispatch_code_input.text(),
+                "circuit_count": self.circuit_count_input.text(),
+                "bundle_count": self.bundle_count_input.text(),
+                "line_length": self.line_length_input.text(),
+                "circuit_length": self.circuit_length_input.text(),
+                "total_towers": self.total_towers_input.text(),
+                "suspension_towers": self.suspension_towers_input.text(),
+                "tension_towers": self.tension_towers_input.text(),
+                "plain_area": self.plain_area_input.text(),
+                "semi_mountainous": self.semi_mountainous_input.text(),
+                "rough_terrain": self.rough_terrain_input.text(),
+                "supervisor": self.supervisor_input.text(),
+                "team_leader": self.team_leader_input.text(),
+                "tower_type": self.tower_type_input.text(),
+                "wire_type": self.wire_type_input.text(),
+                "operation_year": self.operation_year_input.text()
             }
-            dialog = LineInputDialog(self, line_data, is_edit=True)
-            if dialog.exec_() == QDialog.Accepted:
-                line_data = dialog.line_data
-                self.db.execute_query(
-                    """
-                    UPDATE lines SET line_code=?, voltage_level=?, line_name=?, dispatch_code=?, 
-                                     total_towers=?, tension_towers=?, suspension_towers=?, 
-                                     line_length=?, circuit_length=?, plain_area=?, semi_mountainous=?, 
-                                     rough_terrain=?, supervisor=?, team_leader=?, operation_year=?, 
-                                     wire_type=?, tower_type=?, bundle_count=?
-                    WHERE id=?
-                    """,
-                    (
-                        line_data['line_code'], line_data['voltage_level'], line_data['line_name'], 
-                        line_data['dispatch_code'], line_data['total_towers'], line_data['tension_towers'], 
-                        line_data['suspension_towers'], line_data['line_length'], line_data['circuit_length'],
-                        line_data['plain_area'], line_data['semi_mountainous'], line_data['rough_terrain'],
-                        line_data['supervisor'], line_data['team_leader'], line_data['operation_year'],
-                        line_data['wire_type'], line_data['tower_type'], line_data['bundle_count'],
-                        line_data['id']
-                    )
-                )
-                self.load_table()
-                QMessageBox.information(self, "موفقیت", "خط با موفقیت ویرایش شد.")
+
+            # Create SQL query
+            update_pairs = [f"{key} = ?" for key in line_data.keys()]
+            query = f"UPDATE lines SET {', '.join(update_pairs)} WHERE line_code = ?"
+
+            # Execute query with data
+            values = list(line_data.values())
+            values.append(line_code)  # Add line_code for WHERE clause
+            self.cursor.execute(query, tuple(values))
+            self.conn.commit()
+            self.load_table()
+
+            # Clear input fields
+            self.clear_inputs()
+
+            QMessageBox.information(self, "موفقیت", "اطلاعات خط با موفقیت به‌روزرسانی شد.")
+
         except Exception as e:
-            logging.error(f"Error in edit_line: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در ویرایش خط: {str(e)}")
+            QMessageBox.critical(self, "خطا", f"خطا در به‌روزرسانی اطلاعات: {str(e)}")
+            print(f"Error in edit_line: {str(e)}")
 
     def delete_line(self):
         selected_rows = sorted(set(index.row() for index in self.table.selectedIndexes()))
@@ -722,24 +734,86 @@ class LinesWindow(QWidget):
 
     def load_row_data(self):
         pass
-
+        
     def generate_report(self):
         try:
-            rows = self.db.fetch_all("""
-                SELECT line_code, voltage_level, line_name, dispatch_code, total_towers, 
-                       tension_towers, suspension_towers, line_length, circuit_length,
-                       plain_area, semi_mountainous, rough_terrain, supervisor, team_leader,
-                       operation_year, wire_type, tower_type, bundle_count
+            # Get all lines data with properly ordered columns
+            query = """
+                SELECT 
+                    line_code, voltage_level, line_name, dispatch_code, circuit_count,
+                    bundle_count, line_length, circuit_length, total_towers,
+                    suspension_towers, tension_towers, plain_area, semi_mountainous, 
+                    rough_terrain, team_leader, tower_type, wire_type, operation_year
                 FROM lines
-            """)
-            with open("lines_report.csv", "w", encoding="utf-8-sig", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(self.original_headers)
-                writer.writerows(rows)
-            QMessageBox.information(self, "موفقیت", "گزارش با نام lines_report.csv ذخیره شد.")
+            """
+            rows = self.db.fetch_all(query)
+
+            if not rows:
+                QMessageBox.warning(self, "هشدار", "هیچ داده‌ای برای گزارش‌گیری وجود ندارد.")
+                return
+
+            # Define column headers for Excel
+            headers = [
+                "کد خط", "سطح ولتاژ", "نام خط", "کد دیسپاچینگ", "تعداد مدار",
+                "تعداد باندل", "طول خط", "طول مدار", "تعداد کل دکل‌ها",
+                "آویز", "زاویه", "دشت", "نیمه کوهستانی", "صعب العبور",
+                "کارشناس خط", "نوع دکل", "نوع سیم", "سال بهره‌برداری"
+            ]
+
+            # Create DataFrame with proper column order
+            df = pd.DataFrame(rows, columns=headers)
+
+            # Ask user for save location
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "ذخیره فایل گزارش",
+                os.path.join("Data", "گزارش خطوط.xlsx"),
+                "Excel Files (*.xlsx)"
+            )
+            
+            if file_path:
+                # Create a new workbook and select the active sheet
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = 'گزارش خطوط'
+                
+                # Write headers
+                for col, header in enumerate(headers, 1):
+                    cell = ws.cell(row=1, column=col, value=header)
+                    cell.font = openpyxl.styles.Font(name='Vazir', bold=True, size=12)
+                    cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+                
+                # Write data
+                for row_idx, row_data in enumerate(rows, 2):
+                    for col_idx, value in enumerate(row_data, 1):
+                        cell = ws.cell(row=row_idx, column=col_idx, value=str(value) if value is not None else "")
+                        cell.font = openpyxl.styles.Font(name='Vazir', size=11)
+                        cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+                
+                # Auto-adjust column widths (multiply by 2 for Persian characters)
+                for col in ws.columns:
+                    max_length = 0
+                    column = openpyxl.utils.get_column_letter(col[0].column)
+                    
+                    for cell in col:
+                        try:
+                            max_length = max(max_length, len(str(cell.value)) * 2)
+                        except:
+                            pass
+                    
+                    ws.column_dimensions[column].width = max_length
+                
+                # Set RTL direction
+                ws.sheet_view.rightToLeft = True
+                
+                # Save the workbook
+                wb.save(file_path)
+                
+                QMessageBox.information(self, "موفقیت", "گزارش با موفقیت ایجاد شد.")
+
         except Exception as e:
             logging.error(f"Error in generate_report: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در تولید گزارش: {str(e)}")
+            QMessageBox.critical(self, "خطا", f"خطا در ایجاد گزارش: {str(e)}")
 
     def format_number(self, value):
         if pd.notna(value):
@@ -755,102 +829,99 @@ class LinesWindow(QWidget):
             file_path, _ = QFileDialog.getOpenFileName(self, "انتخاب فایل اکسل", "", "Excel Files (*.xlsx *.xls)")
             if not file_path:
                 return
+
             df = pd.read_excel(file_path)
-            expected_columns = self.original_headers
-            if not all(col in df.columns for col in expected_columns):
-                missing_cols = [col for col in expected_columns if col not in df.columns]
-                QMessageBox.critical(self, "خطا", f"ستون‌های زیر در فایل اکسل یافت نشدند: {', '.join(missing_cols)}")
+            logging.debug(f"Columns found in Excel file: {list(df.columns)}")
+
+            excel_columns = {
+                "کد خط": "line_code",
+                "سطح ولتاژ": "voltage_level",
+                "نام خط": "line_name",
+                "کد دیسپاچینگ": "dispatch_code",
+                "تعداد مدار": "circuit_count",
+                "تعداد باندل": "bundle_count",
+                "طول خط": "line_length",
+                "طول مدار": "circuit_length",
+                "تعداد کل دکل‌ها": "total_towers",
+                "آویز": "suspension_towers",
+                "زاویه": "tension_towers",
+                "دشت": "plain_area",
+                "نیمه کوهستانی": "semi_mountainous",
+                "صعب العبور": "rough_terrain",
+                "کارشناس خط": "team_leader",
+                "سرپرست خط": "tower_type",
+                "نوع دکل": "wire_type",
+                "سال بهره‌برداری": "operation_year"
+            }
+
+            missing_columns = [col for col in excel_columns if col not in df.columns]
+            if missing_columns:
+                error_msg = "ستون‌های ضروری زیر در فایل اکسل یافت نشدند:\n"
+                for col in missing_columns:
+                    error_msg += f"- {col}\n"
+                QMessageBox.critical(self, "خطا", error_msg)
                 return
+
             existing_codes = {row[0] for row in self.db.fetch_all("SELECT line_code FROM lines") if row[0]}
-            valid_leaders = {row[0] for row in self.db.fetch_all("SELECT first_name || ' ' || last_name FROM teams WHERE position = 'سرپرست اکیپ'") if row[0]}
             inserted_count = 0
             errors = []
+
             for index, row in df.iterrows():
-                line_code = str(row["کد خط"]) if pd.notna(row["کد خط"]) else ""
-                if not line_code:
+                data = {}
+                for excel_col, db_col in excel_columns.items():
+                    data[db_col] = str(row[excel_col]) if pd.notna(row[excel_col]) else ""
+
+                if not data["line_code"]:
                     errors.append(f"ردیف {index + 2}: کد خط خالی است")
                     continue
-                if line_code in existing_codes:
-                    errors.append(f"ردیف {index + 2}: کد خط '{line_code}' تکراری است")
+                if data["line_code"] in existing_codes:
+                    errors.append(f"ردیف {index + 2}: کد خط '{data['line_code']}' تکراری است")
                     continue
-                if not str(row["نام خط"]):
+                if not data["line_name"]:
                     errors.append(f"ردیف {index + 2}: نام خط خالی است")
                     continue
-                team_leader = str(row["سرپرست اکیپ"]) if pd.notna(row["سرپرست اکیپ"]) else ""
-                if not team_leader or team_leader not in valid_leaders:
-                    errors.append(f"ردیف {index + 2}: سرپرست اکیپ '{team_leader}' نامعتبر است")
-                    continue
-                total_towers = str(row["تعداد کل دکل‌ها"]) if pd.notna(row["تعداد کل دکل‌ها"]) else ""
-                if total_towers and not total_towers.isdigit():
+
+                if data["total_towers"] and not data["total_towers"].isdigit():
                     errors.append(f"ردیف {index + 2}: تعداد کل دکل‌ها باید عدد باشد")
                     continue
-                tension_towers = str(row["دکل‌های کششی"]) if pd.notna(row["دکل‌های کششی"]) else ""
-                if tension_towers and not tension_towers.isdigit():
-                    errors.append(f"ردیف {index + 2}: دکل‌های کششی باید عدد باشد")
-                    continue
-                suspension_towers = str(row["دکل‌های آویزه"]) if pd.notna(row["دکل‌های آویزه"]) else ""
-                if suspension_towers and not suspension_towers.isdigit():
-                    errors.append(f"ردیف {index + 2}: دکل‌های آویزه باید عدد باشد")
-                    continue
-                line_length = str(row["طول خط"]) if pd.notna(row["طول خط"]) else ""
-                if line_length and not re.match(r"^\d*\.?\d*$", line_length):
-                    errors.append(f"ردیف {index + 2}: طول خط باید عدد باشد")
-                    continue
-                circuit_length = str(row["طول مدار"]) if pd.notna(row["طول مدار"]) else ""
-                if circuit_length and not re.match(r"^\d*\.?\d*$", circuit_length):
-                    errors.append(f"ردیف {index + 2}: طول مدار باید عدد باشد")
-                    continue
-                voltage_level = str(row["سطح ولتاژ"]) if pd.notna(row["سطح ولتاژ"]) else ""
-                if voltage_level and not voltage_level.isdigit():
-                    errors.append(f"ردیف {index + 2}: سطح ولتاژ باید عدد باشد")
-                    continue
-                operation_year = str(row["سال بهره‌برداری"]) if pd.notna(row["سال بهره‌برداری"]) else ""
-                if operation_year and not (operation_year.isdigit() and len(operation_year) == 4):
-                    errors.append(f"ردیف {index + 2}: سال بهره‌برداری باید عدد ۴ رقمی باشد")
-                    continue
-                bundle_count = str(row["تعداد باندل"]) if pd.notna(row["تعداد باندل"]) else ""
-                if bundle_count and not bundle_count.isdigit():
-                    errors.append(f"ردیف {index + 2}: تعداد باندل باید عدد باشد")
-                    continue
-                self.db.execute_query(
-                    """
-                    INSERT INTO lines (line_code, voltage_level, line_name, dispatch_code, total_towers, 
-                                       tension_towers, suspension_towers, line_length, circuit_length,
-                                       plain_area, semi_mountainous, rough_terrain, supervisor, team_leader,
-                                       operation_year, wire_type, tower_type, bundle_count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        line_code,
-                        voltage_level,
-                        str(row["نام خط"]) if pd.notna(row["نام خط"]) else "",
-                        str(row["کد دیسپاچینگ"]) if pd.notna(row["کد دیسپاچینگ"]) else "",
-                        total_towers,
-                        tension_towers,
-                        suspension_towers,
-                        self.format_number(row["طول خط"]),
-                        self.format_number(row["طول مدار"]),
-                        str(row["دشت"]) if pd.notna(row["دشت"]) else "",
-                        str(row["نیمه کوهستانی"]) if pd.notna(row["نیمه کوهستانی"]) else "",
-                        str(row["صعب العبور"]) if pd.notna(row["صعب العبور"]) else "",
-                        str(row["ناظر"]) if pd.notna(row["ناظر"]) else "",
-                        team_leader,
-                        operation_year,
-                        str(row["نوع سیم"]) if pd.notna(row["نوع سیم"]) else "",
-                        str(row["نوع دکل"]) if pd.notna(row["نوع دکل"]) else "",
-                        bundle_count
+
+                # Insert valid rows into the database
+                try:
+                    self.db.execute_query(
+                        """
+                        INSERT INTO lines (line_code, voltage_level, line_name, dispatch_code, circuit_count,
+                                           bundle_count, line_length, circuit_length, total_towers,
+                                           suspension_towers, tension_towers, plain_area, semi_mountainous, rough_terrain,
+                                           team_leader, tower_type, wire_type, operation_year)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            data["line_code"], data["voltage_level"], data["line_name"], data["dispatch_code"],
+                            data["circuit_count"], data["bundle_count"], data["line_length"], data["circuit_length"],
+                            data["total_towers"], data["suspension_towers"], data["tension_towers"], data["plain_area"],
+                            data["semi_mountainous"], data["rough_terrain"], data["team_leader"], data["tower_type"],
+                            data["wire_type"], data["operation_year"]
+                        )
                     )
-                )
-                inserted_count += 1
-                existing_codes.add(line_code)
-            self.load_table()
+                    inserted_count += 1
+                except Exception as e:
+                    errors.append(f"ردیف {index + 2}: خطا در درج اطلاعات: {str(e)}")
+
+            # Show results
             if errors:
-                QMessageBox.warning(self, "هشدار", f"{inserted_count} خط وارد شد، اما {len(errors)} خطا رخ داد:\n" + "\n".join(errors[:5]))
-            else:
-                QMessageBox.information(self, "موفقیت", f"{inserted_count} خط با موفقیت از فایل اکسل وارد شد.")
+                error_msg = "خطاهای زیر در ورود اطلاعات رخ دادند:\n"
+                for error in errors:
+                    error_msg += f"- {error}\n"
+                QMessageBox.warning(self, "خطاها", error_msg)
+
+            QMessageBox.information(self, "نتیجه", f"{inserted_count} ردیف با موفقیت وارد شدند.")
+
+            self.load_table()
+
         except Exception as e:
             logging.error(f"Error in import_from_excel: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در وارد کردن اطلاعات از اکسل: {str(e)}")
+            QMessageBox.critical(self, "خطا", f"خطا در ورود اطلاعات از اکسل: {str(e)}")
+        self.load_table()
 
     def show_context_menu(self, position):
         try:
@@ -917,7 +988,7 @@ class LinesWindow(QWidget):
                 logging.error("No line_id found for row")
                 return
             column_name = self.column_names[col]
-            if column_name in ['total_towers', 'tension_towers', 'suspension_towers', 'bundle_count']:
+            if column_name in ['total_towers', 'tension_towers', 'suspension_towers', 'bundle_count', 'circuit_count']:
                 if new_value and not new_value.isdigit():
                     QMessageBox.critical(self, "خطا", f"مقدار {self.original_headers[col]} باید عدد باشد!")
                     self.load_table()
@@ -969,3 +1040,24 @@ class LinesWindow(QWidget):
             logging.error(f"Error in save_cell: {str(e)}\n{traceback.format_exc()}")
             QMessageBox.critical(self, "خطا", f"خطا در ذخیره تغییرات: {str(e)}")
             self.load_table()
+
+    def clear_inputs(self):
+        self.line_code_input.clear()
+        self.voltage_level_input.clear()
+        self.line_name_input.clear()
+        self.dispatch_code_input.clear()
+        self.circuit_count_input.clear()
+        self.bundle_count_input.clear()
+        self.line_length_input.clear()
+        self.circuit_length_input.clear()
+        self.total_towers_input.clear()
+        self.suspension_towers_input.clear()
+        self.tension_towers_input.clear()
+        self.plain_area_input.clear()
+        self.semi_mountainous_input.clear()
+        self.rough_terrain_input.clear()
+        self.supervisor_input.clear()
+        self.team_leader_input.clear()
+        self.tower_type_input.clear()
+        self.wire_type_input.clear()
+        self.operation_year_input.clear()
