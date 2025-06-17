@@ -2,9 +2,10 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QTableWidget, QTableWidgetItem, QMessageBox, QDialog,
     QToolBar, QAction, QFileDialog, QMenu, QApplication,
-    QSizePolicy, QStyle
+    QSizePolicy, QStyle, QFormLayout, QPushButton, QSpacerItem,
+    QComboBox
 )
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtCore import Qt, QPoint, QTimer, QTimer
 from PyQt5.QtGui import QFont, QIcon
 from database import Database
 import pandas as pd
@@ -12,8 +13,17 @@ import os
 import logging
 import traceback
 import openpyxl
+import re
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, Border, Side
+
+# Constants
+FONT_FAMILY = "Vazir"
+FONT_SIZE_NORMAL = 12
+FONT_SIZE_LARGE = 18
+FONT_SIZE_SMALL = 10
+PADDING = 5
+MARGIN = 20
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,6 +31,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 # -----------------------------------------------
 # Filter Popover: A small widget for column-specific filtering
 # -----------------------------------------------
+
 class FilterPopover(QWidget):
     def __init__(self, parent, column_index, column_name, current_filter, on_filter_changed):
         super().__init__(parent)
@@ -30,37 +41,89 @@ class FilterPopover(QWidget):
         self.on_filter_changed = on_filter_changed
         self.setLayout(QVBoxLayout())
         self.layout().setContentsMargins(5, 5, 5, 5)
-        self.setStyleSheet("background-color: white; border: 1px solid #ccc; border-radius: 4px;")
+        self.setStyleSheet("""
+            QWidget {
+                background-color: white; 
+                border: 1px solid #ccc; 
+                border-radius: 4px;
+            }
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                min-height: 25px;
+            }
+            QLineEdit:focus {
+                border-color: #0078d4;
+            }
+        """)
+        
+        # Initialize and set up the debounce timer
+        self.filter_timer = QTimer(self)
+        self.filter_timer.setSingleShot(True)
+        self.filter_timer.setInterval(300)  # 300ms debounce delay
+        self.filter_timer.timeout.connect(self.apply_filter_delayed)
 
-        # Filter input
-        self.filter_input = QLineEdit()
+        # Filter input with improved styling and placeholder
+        self.filter_input = QLineEdit(self)
         self.filter_input.setFont(QFont("Vazir", 10))
         self.filter_input.setPlaceholderText(f"فیلتر {column_name}")
-        self.filter_input.setStyleSheet("padding: 3px; border: 1px solid #ccc; border-radius: 4px;")
-        self.filter_input.setFixedWidth(150)
+        self.filter_input.setFixedWidth(200)
         self.filter_input.setText(current_filter or "")
-        self.filter_input.textChanged.connect(self.apply_filter)
+        self.filter_input.textChanged.connect(self.handle_text_changed)
+        
+        # Add input to layout
         self.layout().addWidget(self.filter_input)
-
-        # Adjust size
+        self.filter_input.setFocus()  # Auto-focus the input
+        
+        # Adjust size to content
         self.adjustSize()
+    
+    def handle_text_changed(self):
+        try:
+            # Reset and start the debounce timer
+            self.filter_timer.stop()
+            self.filter_timer.start()
+        except Exception as e:
+            logging.error(f"Error in handle_text_changed: {str(e)}\n{traceback.format_exc()}")
+            self.show_error("خطا در پردازش فیلتر")
 
-    def apply_filter(self):
+    def apply_filter_delayed(self):
         try:
             filter_text = self.filter_input.text().strip()
-            logging.debug(f"Applying filter for column {self.column_index}: {filter_text}")
+            logging.debug(f"Applying filter for column {self.column_name} ({self.column_index}): {filter_text}")
             self.on_filter_changed(self.column_index, filter_text)
         except Exception as e:
-            logging.error(f"Error in apply_filter: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در اعمال فیلتر: {str(e)}")
+            logging.error(f"Error in apply_filter_delayed: {str(e)}\n{traceback.format_exc()}")
+            self.show_error("خطا در اعمال فیلتر")
+
+    def show_error(self, message):
+        QMessageBox.critical(self, "خطا", message)
 
     def focusOutEvent(self, event):
-        super().focusOutEvent(event)
-        self.close()
+        try:
+            # Ensure any pending filter is applied before closing
+            if self.filter_timer.isActive():
+                self.filter_timer.stop()
+                self.apply_filter_delayed()
+            super().focusOutEvent(event)
+            self.close()
+        except Exception as e:
+            logging.error(f"Error in focusOutEvent: {str(e)}\n{traceback.format_exc()}")
+
+    def closeEvent(self, event):
+        try:
+            # Clean up timer on close
+            if self.filter_timer.isActive():
+                self.filter_timer.stop()
+            super().closeEvent(event)
+        except Exception as e:
+            logging.error(f"Error in closeEvent: {str(e)}\n{traceback.format_exc()}")
 
 # -----------------------------------------------
 # Input Dialog: A dialog for adding or editing line information
 # -----------------------------------------------
+
 class LineInputDialog(QDialog):
     def __init__(self, parent=None, line_data=None, is_edit=False):
         super().__init__(parent)
@@ -368,17 +431,41 @@ class LineInputDialog(QDialog):
 # -----------------------------------------------
 # Lines Window: Displays and manages power line information with column-specific filtering
 # -----------------------------------------------
+
 class LinesWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(20, 20, 20, 20)
-        self.layout.setSpacing(10)
-        self.setLayoutDirection(Qt.RightToLeft)
-        self.setStyleSheet("background-color: #f0f0f0;")        # Column filters
-        self.column_filters = {}
+        self.init_ui()
         
+    def init_ui(self):
+        """Initialize the user interface"""
+        self.setup_layout()
+        self.setup_style()
+        self.setup_widgets()
+        self.setup_connections()
+        self.load_table()
+    
+    def setup_layout(self):
+        """Setup the main layout"""
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN)
+        self.layout.setSpacing(PADDING * 2)
+        self.setLayoutDirection(Qt.RightToLeft)
+        
+    def setup_style(self):
+        """Setup window style"""
+        self.setStyleSheet("background-color: #f0f0f0;")
+        
+    def setup_widgets(self):
+        """Setup all widgets"""
+        self.setup_headers()
+        self.setup_toolbar()
+        self.setup_filter()
+        self.setup_table()
+        
+    def setup_headers(self):
+        """Setup header configurations"""
         # Headers setup
         self.original_headers = [
             "کد خط", "سطح ولتاژ", "نام خط", "کد دیسپاچینگ", "تعداد مدار",
@@ -393,10 +480,13 @@ class LinesWindow(QWidget):
             "suspension_towers", "tension_towers", "plain_area", "semi_mountainous", "rough_terrain",
             "team_leader", "tower_type", "wire_type", "operation_year"
         ]
-
-        # Toolbar
+        
+        self.column_filters = {}
+        
+    def setup_toolbar(self):
+        """Setup toolbar with actions"""
         self.toolbar = QToolBar()
-        self.toolbar.setFont(QFont("Vazir", 18))
+        self.toolbar.setFont(QFont(FONT_FAMILY, FONT_SIZE_LARGE))
         self.toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.toolbar.setStyleSheet("""
             QToolBar { 
@@ -421,8 +511,8 @@ class LinesWindow(QWidget):
             }
             QToolSeparator { color: #333333; font-weight: bold; width: 10px; }
         """)
-        self.layout.addWidget(self.toolbar)
-
+        
+        # Create actions with standardized icons
         self.add_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder)), "افزودن خط جدید", self)
         self.delete_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_TrashIcon)), "حذف", self)
         self.edit_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView)), "ویرایش", self)
@@ -430,6 +520,7 @@ class LinesWindow(QWidget):
         self.report_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView)), "خروجی گرفتن", self)
         self.back_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_ArrowBack)), "برگشت", self)
 
+        # Add actions to toolbar
         self.toolbar.addAction(self.add_action)
         self.toolbar.addSeparator().setText("|")
         self.toolbar.addAction(self.delete_action)
@@ -441,19 +532,48 @@ class LinesWindow(QWidget):
         self.toolbar.addAction(self.report_action)
         self.toolbar.addSeparator().setText("|")
         self.toolbar.addAction(self.back_action)
+        
+        self.layout.addWidget(self.toolbar)
 
-        self.add_action.triggered.connect(self.add_line)
-        self.delete_action.triggered.connect(self.delete_line)
-        self.edit_action.triggered.connect(self.edit_line)
-        self.import_excel_action.triggered.connect(self.import_from_excel)
-        self.report_action.triggered.connect(self.generate_report)
-        self.back_action.triggered.connect(self.close)
+    def setup_table(self):
+        """Setup main data table"""
+        self.table = QTableWidget()
+        self.table.setColumnCount(18)  # Match the number of headers
+        self.table.setHorizontalHeaderLabels(self.original_headers)
+        self.table.setFont(QFont(FONT_FAMILY, FONT_SIZE_NORMAL))
+        self.table.setStyleSheet("""
+            QTableWidget { 
+                border: 1px solid #ccc; 
+                background-color: white; 
+            }
+            QHeaderView::section {
+                background-color: #f0f0f0;
+                padding: 5px;
+                border: 1px solid #ccc;
+                font-weight: bold;
+            }
+        """)
+        
+        # Table settings
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.AnyKeyPressed | QTableWidget.SelectedClicked)
+        
+        # Connect signals
+        self.table.cellClicked.connect(self.load_row_data)
+        self.table.cellChanged.connect(self.save_cell)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_context_menu)
+        self.table.horizontalHeader().sectionClicked.connect(self.show_filter_popover)
+        
+        self.layout.addWidget(self.table)
 
-        # Filter
+    def setup_filter(self):
+        """Setup filter section"""
         self.filter_layout = QHBoxLayout()
         self.filter_input = QLineEdit()
         self.filter_input.setPlaceholderText("جستجو در تمام ستون‌ها...")
-        self.filter_input.setFont(QFont("Vazir", 12))
+        self.filter_input.setFont(QFont(FONT_FAMILY, FONT_SIZE_NORMAL))
         self.filter_input.setStyleSheet("""
             QLineEdit {
                 padding: 5px;
@@ -467,41 +587,28 @@ class LinesWindow(QWidget):
             }
         """)
         self.filter_input.setFixedWidth(300)
+        
+        # Connect signals
         self.filter_input.textChanged.connect(self.filter_table)
-        self.filter_input.mousePressEvent = self.clear_placeholder
-        self.filter_layout.addWidget(QLabel("فیلتر:"))
+        
+        # Add to layout
+        filter_label = QLabel("فیلتر:")
+        filter_label.setFont(QFont(FONT_FAMILY, FONT_SIZE_NORMAL))
+        self.filter_layout.addWidget(filter_label)
         self.filter_layout.addWidget(self.filter_input)
         self.filter_layout.addStretch()
+        
         self.layout.addLayout(self.filter_layout)
 
-        # Table
-        self.table = QTableWidget()
-        self.table.setColumnCount(19)
-        self.table.setHorizontalHeaderLabels(self.original_headers)
-        self.table.setFont(QFont("Vazir", 12))
-        self.table.setStyleSheet("""
-            QTableWidget { 
-                border: 1px solid #ccc; 
-                background-color: white; 
-            }
-        """)
-        self.table.setSelectionMode(QTableWidget.ExtendedSelection)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.AnyKeyPressed | QTableWidget.SelectedClicked)
-        self.table.cellClicked.connect(self.load_row_data)
-        self.table.cellChanged.connect(self.save_cell)
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self.show_context_menu)
-        self.table.horizontalHeader().sectionClicked.connect(self.show_filter_popover)
-        self.layout.addWidget(self.table)
-
-        self.load_table()
-
-    def clear_placeholder(self, event):
-        if not self.filter_input.text() or self.filter_input.text() == self.filter_input.placeholderText():
-            self.filter_input.clear()
-        super(QLineEdit, self.filter_input).mousePressEvent(event)
-
+    def setup_connections(self):
+        """Setup signal connections"""
+        self.add_action.triggered.connect(self.add_line)
+        self.delete_action.triggered.connect(self.delete_line)
+        self.edit_action.triggered.connect(self.edit_line)
+        self.import_excel_action.triggered.connect(self.import_from_excel)
+        self.report_action.triggered.connect(self.generate_report)
+        self.back_action.triggered.connect(self.close)
+        
     def show_filter_popover(self, logical_index):
         try:
             header = self.table.horizontalHeader()
@@ -736,8 +843,8 @@ class LinesWindow(QWidget):
         pass
         
     def generate_report(self):
+        """Generate Excel report with proper formatting"""
         try:
-            # Get all lines data with properly ordered columns
             query = """
                 SELECT 
                     line_code, voltage_level, line_name, dispatch_code, circuit_count,
@@ -745,6 +852,7 @@ class LinesWindow(QWidget):
                     suspension_towers, tension_towers, plain_area, semi_mountainous, 
                     rough_terrain, team_leader, tower_type, wire_type, operation_year
                 FROM lines
+                ORDER BY line_code
             """
             rows = self.db.fetch_all(query)
 
@@ -752,18 +860,41 @@ class LinesWindow(QWidget):
                 QMessageBox.warning(self, "هشدار", "هیچ داده‌ای برای گزارش‌گیری وجود ندارد.")
                 return
 
-            # Define column headers for Excel
-            headers = [
-                "کد خط", "سطح ولتاژ", "نام خط", "کد دیسپاچینگ", "تعداد مدار",
-                "تعداد باندل", "طول خط", "طول مدار", "تعداد کل دکل‌ها",
-                "آویز", "زاویه", "دشت", "نیمه کوهستانی", "صعب العبور",
-                "کارشناس خط", "نوع دکل", "نوع سیم", "سال بهره‌برداری"
-            ]
-
-            # Create DataFrame with proper column order
-            df = pd.DataFrame(rows, columns=headers)
-
-            # Ask user for save location
+            # Create Excel workbook
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = 'گزارش خطوط'
+            
+            # Write headers
+            for col, header in enumerate(self.original_headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = openpyxl.styles.Font(name=FONT_FAMILY, bold=True, size=12)
+                cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            
+            # Write data
+            for row_idx, row_data in enumerate(rows, 2):
+                for col_idx, value in enumerate(row_data, 1):
+                    cell = ws.cell(row=row_idx, column=col_idx, value=str(value) if value is not None else "")
+                    cell.font = openpyxl.styles.Font(name=FONT_FAMILY, size=11)
+                    cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
+            
+            # Auto-adjust column widths (multiply by 2 for Persian characters)
+            for col in ws.columns:
+                max_length = 0
+                column = get_column_letter(col[0].column)
+                
+                for cell in col:
+                    try:
+                        max_length = max(max_length, len(str(cell.value)) * 2)
+                    except:
+                        pass
+                
+                ws.column_dimensions[column].width = max_length
+            
+            # Set RTL direction
+            ws.sheet_view.rightToLeft = True
+            
+            # Get save location
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "ذخیره فایل گزارش",
@@ -772,43 +903,7 @@ class LinesWindow(QWidget):
             )
             
             if file_path:
-                # Create a new workbook and select the active sheet
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = 'گزارش خطوط'
-                
-                # Write headers
-                for col, header in enumerate(headers, 1):
-                    cell = ws.cell(row=1, column=col, value=header)
-                    cell.font = openpyxl.styles.Font(name='Vazir', bold=True, size=12)
-                    cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
-                
-                # Write data
-                for row_idx, row_data in enumerate(rows, 2):
-                    for col_idx, value in enumerate(row_data, 1):
-                        cell = ws.cell(row=row_idx, column=col_idx, value=str(value) if value is not None else "")
-                        cell.font = openpyxl.styles.Font(name='Vazir', size=11)
-                        cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center')
-                
-                # Auto-adjust column widths (multiply by 2 for Persian characters)
-                for col in ws.columns:
-                    max_length = 0
-                    column = openpyxl.utils.get_column_letter(col[0].column)
-                    
-                    for cell in col:
-                        try:
-                            max_length = max(max_length, len(str(cell.value)) * 2)
-                        except:
-                            pass
-                    
-                    ws.column_dimensions[column].width = max_length
-                
-                # Set RTL direction
-                ws.sheet_view.rightToLeft = True
-                
-                # Save the workbook
                 wb.save(file_path)
-                
                 QMessageBox.information(self, "موفقیت", "گزارش با موفقیت ایجاد شد.")
 
         except Exception as e:
@@ -1061,3 +1156,180 @@ class LinesWindow(QWidget):
         self.tower_type_input.clear()
         self.wire_type_input.clear()
         self.operation_year_input.clear()
+
+    # -----------------------------------------------
+    # Line Input Dialog: A dialog for adding new lines with validation and standardized styling
+    # -----------------------------------------------
+
+    class LineInputDialog(QDialog):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setWindowTitle("افزودن خط جدید")
+            self.setup_ui()
+            
+        def setup_ui(self):
+            """Initialize dialog UI"""
+            self.layout = QVBoxLayout(self)
+            self.layout.setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN)
+            self.layout.setSpacing(PADDING)
+            
+            # Form layout for input fields
+            self.form_layout = QFormLayout()
+            self.form_layout.setSpacing(PADDING)
+            
+            # Create input fields
+            self.create_input_fields()
+            
+            # Add form layout to main layout
+            self.layout.addLayout(self.form_layout)
+            
+            # Add spacing
+            self.layout.addSpacerItem(QSpacerItem(0, 15, QSizePolicy.Minimum, QSizePolicy.Fixed))
+            
+            # Buttons
+            self.button_layout = QHBoxLayout()
+            self.save_button = QPushButton("ذخیره")
+            self.cancel_button = QPushButton("لغو")
+            
+            self.save_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    padding: 5px 15px;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #45a049;
+                }
+            """)
+            
+            self.cancel_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #f44336;
+                    color: white;
+                    border: none;
+                    padding: 5px 15px;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #da190b;
+                }
+            """)
+            
+            self.button_layout.addWidget(self.save_button)
+            self.button_layout.addWidget(self.cancel_button)
+            self.layout.addLayout(self.button_layout)
+            
+            # Connect signals
+            self.save_button.clicked.connect(self.accept)
+            self.cancel_button.clicked.connect(self.reject)
+            
+        def create_input_fields(self):
+            """Create and setup input fields"""
+            # Create input fields with proper validation
+            self.line_code = QLineEdit()
+            self.voltage_level = QLineEdit()
+            self.line_name = QLineEdit()
+            self.dispatch_code = QLineEdit()
+            self.circuit_count = QLineEdit()
+            self.bundle_count = QLineEdit()
+            self.line_length = QLineEdit()
+            self.circuit_length = QLineEdit()
+            self.total_towers = QLineEdit()
+            self.suspension_towers = QLineEdit()
+            self.tension_towers = QLineEdit()
+            self.plain_area = QLineEdit()
+            self.semi_mountainous = QLineEdit()
+            self.rough_terrain = QLineEdit()
+            self.team_leader = QLineEdit()
+            self.tower_type = QLineEdit()
+            self.wire_type = QLineEdit()
+            self.operation_year = QLineEdit()
+            
+            # Set font for all fields
+            for field in self.__dict__.values():
+                if isinstance(field, QLineEdit):
+                    field.setFont(QFont(FONT_FAMILY, FONT_SIZE_NORMAL))
+            
+            # Add fields to form layout with labels
+            field_labels = [
+                ("کد خط:", self.line_code),
+                ("سطح ولتاژ:", self.voltage_level),
+                ("نام خط:", self.line_name),
+                ("کد دیسپاچینگ:", self.dispatch_code),
+                ("تعداد مدار:", self.circuit_count),
+                ("تعداد باندل:", self.bundle_count),
+                ("طول خط:", self.line_length),
+                ("طول مدار:", self.circuit_length),
+                ("تعداد کل دکل‌ها:", self.total_towers),
+                ("آویز:", self.suspension_towers),
+                ("زاویه:", self.tension_towers),
+                ("دشت:", self.plain_area),
+                ("نیمه کوهستانی:", self.semi_mountainous),
+                ("صعب العبور:", self.rough_terrain),
+                ("کارشناس خط:", self.team_leader),
+                ("نوع دکل:", self.tower_type),
+                ("نوع سیم:", self.wire_type),
+                ("سال بهره‌برداری:", self.operation_year)
+            ]
+            
+            for label, field in field_labels:
+                label_widget = QLabel(label)
+                label_widget.setFont(QFont(FONT_FAMILY, FONT_SIZE_NORMAL))
+                self.form_layout.addRow(label_widget, field)
+                
+        def validate_input(self):
+            """Validate input fields"""
+            if not self.line_code.text():
+                QMessageBox.warning(self, "خطا", "کد خط نمی‌تواند خالی باشد.")
+                return False
+                
+            if not self.line_name.text():
+                QMessageBox.warning(self, "خطا", "نام خط نمی‌تواند خالی باشد.")
+                return False
+                
+            if self.line_length.text() and not re.match(r"^\d*\.?\d*$", self.line_length.text()):
+                QMessageBox.warning(self, "خطا", "طول خط باید عدد باشد.")
+                return False
+                
+            if self.circuit_length.text() and not re.match(r"^\d*\.?\d*$", self.circuit_length.text()):
+                QMessageBox.warning(self, "خطا", "طول مدار باید عدد باشد.")
+                return False
+                
+            return True
+            
+        def get_line_data(self):
+            """Get the line data as a dictionary"""
+            if not self.validate_input():
+                return None
+                
+            return {
+                'line_code': self.line_code.text(),
+                'voltage_level': self.voltage_level.text(),
+                'line_name': self.line_name.text(),
+                'dispatch_code': self.dispatch_code.text(),
+                'circuit_count': self.circuit_count.text(),
+                'bundle_count': self.bundle_count.text(),
+                'line_length': self.line_length.text(),
+                'circuit_length': self.circuit_length.text(),
+                'total_towers': self.total_towers.text(),
+                'suspension_towers': self.suspension_towers.text(),
+                'tension_towers': self.tension_towers.text(),
+                'plain_area': self.plain_area.text(),
+                'semi_mountainous': self.semi_mountainous.text(),
+                'rough_terrain': self.rough_terrain.text(),
+                'team_leader': self.team_leader.text(),
+                'tower_type': self.tower_type.text(),
+                'wire_type': self.wire_type.text(),
+                'operation_year': self.operation_year.text()
+            }
+
+    def clear_placeholder(self, event):
+        """Clear placeholder text when the filter input is clicked"""
+        try:
+            if self.filter_input.placeholderText() and not self.filter_input.text():
+                self.filter_input.setPlaceholderText("")
+            super(QLineEdit, self.filter_input).mousePressEvent(event)
+        except Exception as e:
+            logging.error(f"Error in clear_placeholder: {str(e)}\n{traceback.format_exc()}")

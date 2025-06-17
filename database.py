@@ -41,20 +41,20 @@ class Database:
                 voltage_level TEXT,
                 line_name TEXT NOT NULL,
                 dispatch_code TEXT,
-                total_towers TEXT,
-                tension_towers TEXT,
-                suspension_towers TEXT,
+                circuit_count TEXT,
+                bundle_count TEXT,
                 line_length TEXT,
                 circuit_length TEXT,
+                total_towers TEXT,
+                suspension_towers TEXT,
+                tension_towers TEXT,
                 plain_area TEXT,
                 semi_mountainous TEXT,
                 rough_terrain TEXT,
-                supervisor TEXT,
                 team_leader TEXT,
-                operation_year TEXT,
-                wire_type TEXT,
                 tower_type TEXT,
-                bundle_count TEXT
+                wire_type TEXT,
+                operation_year TEXT
             )
         ''')
         cursor.execute('''
