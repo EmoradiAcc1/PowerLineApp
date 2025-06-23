@@ -41,20 +41,20 @@ class Database:
                 voltage_level TEXT,
                 line_name TEXT NOT NULL,
                 dispatch_code TEXT,
-                circuit_count TEXT,
-                bundle_count TEXT,
+                total_towers TEXT,
+                tension_towers TEXT,
+                suspension_towers TEXT,
                 line_length TEXT,
                 circuit_length TEXT,
-                total_towers TEXT,
-                suspension_towers TEXT,
-                tension_towers TEXT,
                 plain_area TEXT,
                 semi_mountainous TEXT,
                 rough_terrain TEXT,
+                supervisor TEXT,
                 team_leader TEXT,
-                tower_type TEXT,
+                operation_year TEXT,
                 wire_type TEXT,
-                operation_year TEXT
+                tower_type TEXT,
+                bundle_count TEXT
             )
         ''')
         cursor.execute('''
@@ -106,6 +106,12 @@ class Database:
             
         try:
             cursor.execute('ALTER TABLE towers ADD COLUMN latitude REAL')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+            
+        # Add supervisor column to lines table if it doesn't exist
+        try:
+            cursor.execute('ALTER TABLE lines ADD COLUMN supervisor TEXT')
         except sqlite3.OperationalError:
             pass  # Column already exists
 
