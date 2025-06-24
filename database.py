@@ -38,23 +38,23 @@ class Database:
             CREATE TABLE IF NOT EXISTS lines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 line_code TEXT NOT NULL UNIQUE,
-                voltage_level TEXT,
+                voltage_level INTEGER,
                 line_name TEXT NOT NULL,
                 dispatch_code TEXT,
-                total_towers TEXT,
-                tension_towers TEXT,
-                suspension_towers TEXT,
-                line_length TEXT,
-                circuit_length TEXT,
+                total_towers INTEGER,
+                tension_towers INTEGER,
+                suspension_towers INTEGER,
+                line_length REAL,
+                circuit_length REAL,
                 plain_area TEXT,
                 semi_mountainous TEXT,
                 rough_terrain TEXT,
-                supervisor TEXT,
-                team_leader TEXT,
-                operation_year TEXT,
+                team_leader TEXT NOT NULL,
+                operation_year INTEGER,
                 wire_type TEXT,
                 tower_type TEXT,
-                bundle_count TEXT
+                bundle_count INTEGER,
+                circuit_count INTEGER
             )
         ''')
         cursor.execute('''
