@@ -961,17 +961,23 @@ class TowersWindow(QWidget):
     def generate_report(self):
         try:
             rows = self.db.fetch_all("""
-                SELECT line_name, tower_number, tower_structure, tower_type, base_type,
-                       height_leg_a, height_leg_b, height_leg_c, height_leg_d,
-                       insulator_type_c1_r, insulator_type_c1_s, insulator_type_c1_t,
-                       insulator_type_c2_r, insulator_type_c2_s, insulator_type_c2_t,
-                       insulator_count_c1_r, insulator_count_c1_s, insulator_count_c1_t,
-                       insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t
-                FROM towers
+                SELECT t.line_name, t.tower_number, t.tower_structure, t.tower_type, t.base_type,
+                       t.height_leg_a, t.height_leg_b, t.height_leg_c, t.height_leg_d,
+                       t.insulator_type_c1_r, t.insulator_type_c1_s, t.insulator_type_c1_t,
+                       t.insulator_type_c2_r, t.insulator_type_c2_s, t.insulator_type_c2_t,
+                       t.insulator_count_c1_r, t.insulator_count_c1_s, t.insulator_count_c1_t,
+                       t.insulator_count_c2_r, t.insulator_count_c2_s, t.insulator_count_c2_t,
+                       t.longitude, t.latitude, l.supervisor
+                FROM towers t
+                LEFT JOIN lines l ON t.line_name = l.line_name
             """)
+            
+            # Add supervisor column to headers for export
+            export_headers = self.original_headers + ["سرپرست خط"]
+            
             with open("towers_report.csv", "w", encoding="utf-8-sig", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(self.original_headers)
+                writer.writerow(export_headers)
                 writer.writerows(rows)
             QMessageBox.information(self, "موفقیت", "گزارش با نام towers_report.csv ذخیره شد.")
         except Exception as e:
@@ -993,18 +999,30 @@ class TowersWindow(QWidget):
             if not file_path:
                 return
             df = pd.read_excel(file_path)
+            
+            # Check if supervisor column exists and handle it properly
+            has_supervisor = "سرپرست خط" in df.columns
             expected_columns = self.original_headers
+            if has_supervisor:
+                expected_columns = expected_columns + ["سرپرست خط"]
+                
             if not all(col in df.columns for col in expected_columns):
                 missing_cols = [col for col in expected_columns if col not in df.columns]
                 QMessageBox.critical(self, "خطا", f"ستون‌های زیر در فایل اکسل یافت نشدند: {', '.join(missing_cols)}")
                 return
+                
             existing_towers = {(row[0], row[1]) for row in self.db.fetch_all("SELECT line_name, tower_number FROM towers") if row[0] and row[1]}
             valid_lines = {row[0] for row in self.db.fetch_all("SELECT line_name FROM lines") if row[0]}
+            
+            # Get valid supervisors from lines table
+            valid_supervisors = {row[0] for row in self.db.fetch_all("SELECT DISTINCT supervisor FROM lines WHERE supervisor IS NOT NULL AND supervisor != ''") if row[0]}
+            
             inserted_count = 0
             errors = []
             for index, row in df.iterrows():
                 line_name = str(row["نام خط"]) if pd.notna(row["نام خط"]) else ""
                 tower_number = str(row["شماره دکل"]) if pd.notna(row["شماره دکل"]) else ""
+                
                 if not line_name:
                     errors.append(f"ردیف {index + 2}: نام خط خالی است")
                     continue
@@ -1017,6 +1035,15 @@ class TowersWindow(QWidget):
                 if (line_name, tower_number) in existing_towers:
                     errors.append(f"ردیف {index + 2}: دکل '{tower_number}' برای خط '{line_name}' تکراری است")
                     continue
+                    
+                # Handle supervisor validation if column exists
+                if has_supervisor:
+                    supervisor = str(row["سرپرست خط"]) if pd.notna(row["سرپرست خط"]) else ""
+                    if supervisor and supervisor not in valid_supervisors:
+                        errors.append(f"ردیف {index + 2}: سرپرست خط '{supervisor}' نامعتبر است")
+                        continue
+                
+                # Validate numeric fields
                 height_leg_a = str(row["ارتفاع پایه A"]) if pd.notna(row["ارتفاع پایه A"]) else ""
                 if height_leg_a and not re.match(r"^\d*\.?\d*$", height_leg_a):
                     errors.append(f"ردیف {index + 2}: ارتفاع پایه A باید عدد باشد")
@@ -1033,6 +1060,8 @@ class TowersWindow(QWidget):
                 if height_leg_d and not re.match(r"^\d*\.?\d*$", height_leg_d):
                     errors.append(f"ردیف {index + 2}: ارتفاع پایه D باید عدد باشد")
                     continue
+                    
+                # Validate insulator counts
                 insulator_count_c1_r = str(row["تعداد R مدار اول"]) if pd.notna(row["تعداد R مدار اول"]) else ""
                 if insulator_count_c1_r and not insulator_count_c1_r.isdigit():
                     errors.append(f"ردیف {index + 2}: تعداد R مدار اول باید عدد باشد")
@@ -1057,6 +1086,8 @@ class TowersWindow(QWidget):
                 if insulator_count_c2_t and not insulator_count_c2_t.isdigit():
                     errors.append(f"ردیف {index + 2}: تعداد T مدار دوم باید عدد باشد")
                     continue
+                    
+                # Insert tower data
                 self.db.execute_query(
                     """
                     INSERT INTO towers (line_name, tower_number, tower_structure, tower_type, base_type,
@@ -1094,8 +1125,19 @@ class TowersWindow(QWidget):
                         str(row["عرض جغرافیایی"]) if pd.notna(row["عرض جغرافیایی"]) else None
                     )
                 )
+                
+                # Update supervisor in lines table if provided
+                if has_supervisor:
+                    supervisor = str(row["سرپرست خط"]) if pd.notna(row["سرپرست خط"]) else ""
+                    if supervisor:
+                        self.db.execute_query(
+                            "UPDATE lines SET supervisor = ? WHERE line_name = ?",
+                            (supervisor, line_name)
+                        )
+                
                 inserted_count += 1
                 existing_towers.add((line_name, tower_number))
+                
             self.load_table()
             if errors:
                 QMessageBox.warning(self, "هشدار", f"{inserted_count} دکل وارد شد، اما {len(errors)} خطا رخ داد:\n" + "\n".join(errors[:5]))

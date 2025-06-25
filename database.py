@@ -108,6 +108,12 @@ class Database:
             cursor.execute('ALTER TABLE towers ADD COLUMN latitude REAL')
         except sqlite3.OperationalError:
             pass  # Column already exists
+            
+        # Add supervisor column to lines table if it doesn't exist
+        try:
+            cursor.execute('ALTER TABLE lines ADD COLUMN supervisor TEXT')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     def execute_query(self, query, params=()):
         """یک کوئری اجرا کرده و تغییرات را ثبت می‌کند (برای INSERT, UPDATE, DELETE)."""
