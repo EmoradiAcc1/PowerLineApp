@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --windowed --onefile main.py --add-data "modules/Maps;modules/Maps" --add-data "Styles;Styles" --add-data "Resources;Resources" --add-data "fonts;fonts"

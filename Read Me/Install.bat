@@ -1,0 +1,1 @@
+   pyinstaller --noconfirm --windowed main.py --add-data "database;database" --add-data "Resources;Resources" --add-data "Styles;Styles" --add-data "fonts;fonts" --add-data "Maps;Maps" --add-data "Data;Data"

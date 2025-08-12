@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenStreetMap with Leaflet</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="../Styles/map.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <style>
+        @font-face {
+            font-family: 'Vazir';
+            src: url('fonts/Vazir.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .leaflet-container, .leaflet-grab, .leaflet-interactive {
+            cursor: default !important;
+        }
+        .custom-div-icon {
+            border-radius: 50%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.3);
+        }
+        /* استایل فونت وزیر برای پاپ‌آپ leaflet */
+        .leaflet-popup-content {
+            font-family: 'Vazir', Tahoma, sans-serif !important;
+            font-size: 12pt !important;
+            direction: rtl;
+            text-align: right;
+        }
+        .tower-popup {
+            min-width: 240px;
+            padding: 8px 0 0 0;
+        }
+        .popup-title {
+            font-size: 13pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #1b3a5c;
+        }
+        .popup-section {
+            background: #f7f7fa;
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 4px;
+        }
+        .popup-section div {
+            margin-bottom: 4px;
+        }
+        #lines-panel {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            z-index: 1000;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.13);
+            padding: 18px 18px 12px 18px;
+            min-width: 220px;
+            max-width: 320px;
+            font-family: 'Vazir', Tahoma, sans-serif;
+        }
+        .panel-title {
+            font-size: 15pt;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #1b3a5c;
+            text-align: right;
+        }
+        #lines-list {
+            max-height: calc(100vh - 180px);
+            overflow-y: auto;
+            direction: rtl;
+        }
+        .line-checkbox-row {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            direction: rtl;
+        }
+        .line-checkbox-row input[type="checkbox"] {
+            margin-left: 8px;
+            accent-color: #1b3a5c;
+            width: 18px;
+            height: 18px;
+        }
+        .line-checkbox-row label {
+            font-size: 12pt;
+            cursor: pointer;
+        }
+        #layers-panel {
+            position: absolute;
+            top: 20px;
+            left: 60px;
+            z-index: 1001;
+        }
+        #layers-selector-btn {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+            padding: 10px 24px;
+            font-family: 'Vazir', Tahoma, sans-serif;
+            font-size: 13pt;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+        #layers-selector-dropdown {
+            display: none;
+            position: absolute;
+            top: 48px;
+            left: 0;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+            padding: 12px 0;
+            min-width: 200px;
+            font-family: 'Vazir', Tahoma, sans-serif;
+        }
+        .layer-checkbox-row {
+            display: flex;
+            align-items: flex-start;
+            width: 180px;
+            text-align: right;
+            padding: 6px 0px;
+            cursor: pointer;
+            direction: rtl;
+        }
+        .layer-checkbox-row input[type="checkbox"] {
+            margin-left: 8px;
+            accent-color: #1b3a5c;
+            width: 18px;
+            height: 18px;
+        }
+        
+        /* نوار ابزار نقشه */
+        #map-toolbar {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1003;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+            padding: 8px;
+            display: flex;
+            gap: 4px;
+            font-family: 'Vazir', Tahoma, sans-serif;
+        }
+        .toolbar-btn {
+            background: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px;
+            margin: 0 2px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+            outline: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .toolbar-btn:hover {
+            background: #f5f5f5;
+            border-color: #ccc;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        }
+        
+        .toolbar-btn:active {
+            background: #e9e9e9;
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .toolbar-btn:focus, .toolbar-btn:active {
+            outline: none !important;
+            border-color: #ddd !important;
+            box-shadow: none !important;
+            border-style: solid !important;
+        }
+        
+        .toolbar-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: #333;
+            display: block;
+        }
+        
+        .toolbar-btn:hover svg {
+            fill: #007bff;
+        }
+        .toolbar-btn.active {
+            background: #e6e6f7;
+            color: #1b3a5c;
+        }
+        .toolbar-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+        .toolbar-btn .tooltip {
+            position: absolute;
+            bottom: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #017BCC;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11pt;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease;
+            z-index: 1004;
+            color:white;
+            font-family: 'Vazir', Tahoma, sans-serif !important;
+        }
+        .toolbar-btn:hover .tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+        .toolbar-separator {
+            width: 1px;
+            background: #e0e0e0;
+            margin: 4px 2px;
+        }
+        .voltage-separator {
+            font-size: 13pt;
+            font-weight: normal;
+            color: #1b3a5c;
+            background: #e6e6f7;
+            border-radius: 8px;
+            padding: 6px 10px;
+            margin: 12px 0 6px 0;
+            text-align: right;
+        }
+        
+        /* منوی انتخاب نقشه */
+        #map-selector-panel {
+            position: absolute;
+            top: 20px;
+            left: 200px;
+            z-index: 1002;
+        }
+        #map-selector-btn {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+            padding: 10px 24px;
+            font-family: 'Vazir', Tahoma, sans-serif;
+            font-size: 13pt;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+        #map-selector-dropdown {
+            display: none;
+            position: absolute;
+            top: 48px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+            padding: 12px 0;
+            min-width: 200px;
+            font-family: 'Vazir', Tahoma, sans-serif;
+        }
+        .crosshair-cursor, .crosshair-cursor * {
+            cursor: crosshair !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Custom Modal Dialog for Line Info -->
+    <div id="line-info-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:2000; align-items:center; justify-content:center; pointer-events:none;">
+        <div id="line-info-content" style="background:#fff; border-radius:18px; box-shadow:0 4px 32px rgba(0,0,0,0.18); padding:32px 32px 24px 32px; min-width:340px; max-width:95vw; max-height:90vh; overflow-y:auto; font-family:Vazir,Tahoma,sans-serif; font-size:12pt; text-align:center; line-height:2.1; position:relative; pointer-events:auto;">
+            <button id="close-line-info" style="position:absolute; left:18px; top:18px; background:transparent; border:none; font-size:22px; color:#888; cursor:pointer;">&times;</button>
+            <div id="line-info-html"></div>
+        </div>
+    </div>
+    <!-- نمایش زنده مختصات و اندازه‌گیری -->
+    <div id="live-coordinates" style="display: none; position: fixed; bottom: 20px; left: 20px; background: rgba(0,0,0,0.8); color: white; padding: 8px 12px; border-radius: 6px; font-family: 'Vazir', Tahoma, sans-serif; font-size: 12px; z-index: 1000; direction: ltr;">
+        <div>Lat: <span id="live-lat">0.000000</span></div>
+        <div>Lng: <span id="live-lng">0.000000</span></div>
+        <div id="live-measurement" style="display: none; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.3); padding-top: 8px;">
+            <div id="live-distance" style="display: none;">فاصله: <span id="distance-value">0</span></div>
+            <div id="live-area" style="display: none;">مساحت: <span id="area-value">0</span> متر مربع</div>
+        </div>
+    </div>
+
+    <!-- نوار ابزار نقشه -->
+    <div id="map-toolbar">
+        <!-- زوم این -->
+        <button class="toolbar-btn" id="zoom-in-btn">
+            <svg viewBox="0 0 24 24">
+                <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
+            </svg>
+            <div class="tooltip">بزرگنمایی</div>
+        </button>
+        <!-- زوم اوت -->
+        <button class="toolbar-btn" id="zoom-out-btn">
+            <svg viewBox="0 0 24 24">
+                <path d="M19,13H5V11H19V13Z"/>
+            </svg>
+            <div class="tooltip">کوچکنمایی</div>
+        </button>
+        <!-- زوم در ناحیه -->
+        <button class="toolbar-btn" id="zoom-box-btn">
+            <svg viewBox="0 0 24 24">
+                <rect x="4" y="4" width="13" height="13" rx="2" fill="#fff" stroke="#333" stroke-width="2"/>
+                <circle cx="18.5" cy="18.5" r="3.5" fill="#fff" stroke="#333" stroke-width="2"/>
+                <line x1="20.5" y1="20.5" x2="22.5" y2="22.5" stroke="#333" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <div class="tooltip">زوم در ناحیه</div>
+        </button>
+        <!-- اندازه گیری فاصله -->
+        <button class="toolbar-btn" id="measure-distance-btn">
+            <svg viewBox="0 0 24 24">
+                <line x1="4" y1="20" x2="20" y2="4" stroke="#333" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="4" cy="20" r="2.2" fill="#fff" stroke="#333" stroke-width="1.5"/>
+                <circle cx="20" cy="4" r="2.2" fill="#fff" stroke="#333" stroke-width="1.5"/>
+            </svg>
+            <div class="tooltip">اندازه گیری فاصله</div>
+        </button>
+        <!-- اندازه گیری مساحت -->
+        <button class="toolbar-btn" id="measure-area-btn">
+            <svg viewBox="0 0 24 24">
+                <polygon points="4,17 8,5 16,4 20,12 12,20" fill="#fff8e1" stroke="#333" stroke-width="2"/>
+                <circle cx="4" cy="17" r="1.5" fill="#fff" stroke="#333" stroke-width="1"/>
+                <circle cx="8" cy="5" r="1.5" fill="#fff" stroke="#333" stroke-width="1"/>
+                <circle cx="16" cy="4" r="1.5" fill="#fff" stroke="#333" stroke-width="1"/>
+                <circle cx="20" cy="12" r="1.5" fill="#fff" stroke="#333" stroke-width="1"/>
+                <circle cx="12" cy="20" r="1.5" fill="#fff" stroke="#333" stroke-width="1"/>
+            </svg>
+            <div class="tooltip">اندازه گیری مساحت</div>
+        </button>
+        <!-- مختصات -->
+        <button class="toolbar-btn" id="coordinates-btn">
+            <svg viewBox="0 0 24 24">
+                <path d="M12,2C8.13,2 5,5.13 5,9c0,5.25 7,13 7,13s7-7.75 7-13C19,5.13 15.87,2 12,2z M12,11.5c-1.38,0-2.5-1.12-2.5-2.5s1.12-2.5,2.5-2.5s2.5,1.12,2.5,2.5S13.38,11.5,12,11.5z"/>
+            </svg>
+            <div class="tooltip">نمایش مختصات</div>
+        </button>
+        <!-- پاک کردن -->
+        <button class="toolbar-btn" id="clear-btn">
+            <svg viewBox="0 0 24 24">
+                <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+            </svg>
+            <div class="tooltip">پاک کردن</div>
+        </button>
+        <!-- دکمه نمایش/مخفی‌کردن همه خطوط -->
+        <button class="toolbar-btn" id="toggle-all-lines-btn">
+            <svg id="toggle-all-lines-icon" viewBox="0 0 24 24" width="20" height="20">
+                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5zm0 13c-3.87 0-7.19-2.54-8.48-6C4.81 7.54 8.13 5 12 5s7.19 2.54 8.48 6c-1.29 3.46-4.61 6-8.48 6zm0-10a4 4 0 100 8 4 4 0 000-8zm0 6.5A2.5 2.5 0 1114.5 12 2.5 2.5 0 0112 14.5z"/>
+            </svg>
+            <div class="tooltip">نمایش/مخفی‌کردن همه خطوط</div>
+        </button>
+        <!-- بازگشت به نمای اصلی -->
+        <button class="toolbar-btn" id="reset-view-btn">
+            <svg viewBox="0 0 24 24">
+                <path d="M3 12L12 4L21 12V20C21 20.55 20.55 21 20 21H4C3.45 21 3 20.55 3 20V12Z" fill="#fff" stroke="#333" stroke-width="2"/>
+                <rect x="9" y="15" width="6" height="6" fill="#fff" stroke="#333" stroke-width="1.5"/>
+            </svg>
+            <div class="tooltip">بازگشت به خانه</div>
+        </button>
+    </div>
+
+    <!-- منوی انتخاب نقشه -->
+    <div id="map-selector-panel">
+        <div id="map-selector-btn">
+            <span id="map-selector-label">انتخاب نقشه</span>
+            <svg style="margin-right: 8px;" width="18" height="18" viewBox="0 0 24 24"><path fill="#1b3a5c" d="M7 10l5 5 5-5z"/></svg>
+        </div>
+        <div id="map-selector-dropdown">
+            <label style="display: flex; align-items: flex-start; width: 180px; text-align: right; padding: 6px 0px; cursor: pointer; direction: rtl;">
+                <input type="radio" name="map-base" value="osm" checked style="margin-left: 8px; accent-color: #1b3a5c; width: 18px; height: 18px;">
+                نقشه OSM
+            </label>
+            <label style="display: flex; align-items: flex-start; width: 180px; text-align: right; padding: 6px 0px; cursor: pointer; direction: rtl;">
+                <input type="radio" name="map-base" value="satellite" style="margin-left: 8px; accent-color: #1b3a5c; width: 18px; height: 18px;">
+                نقشه ماهواره‌ای
+            </label>
+        </div>
+    </div>
+
+    <div id="lines-panel">
+        <div class="panel-title">انتخاب خطوط</div>
+        <div id="lines-list"></div>
+    </div>
+    <div id="layers-panel">
+        <div id="layers-selector-btn">
+            <span id="layers-selector-label">لایه‌ها</span>
+            <svg style="margin-right: 8px;" width="18" height="18" viewBox="0 0 24 24"><path fill="#1b3a5c" d="M7 10l5 5 5-5z"/></svg>
+        </div>
+        <div id="layers-selector-dropdown">
+            <label class="layer-checkbox-row">
+                <input type="checkbox" id="toggle-tower-paths" checked>
+                نمایش مسیر خط
+            </label>
+            <label class="layer-checkbox-row">
+                <input type="checkbox" id="toggle-tower-markers">
+                نمایش دکل‌ها
+            </label>
+            <label class="layer-checkbox-row">
+                <input type="checkbox" id="toggle-tower-labels">
+                نمایش شماره دکل‌ها
+            </label>
+        </div>
+    </div>
+    <div id="map"></div>
+    <script>
+        // ایجاد نقشه با مختصات اولیه (کرمانشاه)
+        var map = L.map('map', {
+            scrollWheelZoom: true,
+            wheelDebounceTime: 0,
+            wheelPxPerZoomLevel: 40,
+            zoomControl: false
+        }).setView([34.3142, 47.0650], 10);
+        var markers = L.layerGroup().addTo(map);
+        var allTowers = [];
+        var selectedLines = new Set();
+
+        // --- لایه‌های مختلف نقشه ---
+        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        });
+        var satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            attribution: '© Google Satellite',
+            maxZoom: 20
+        });
+        
+        // نقشه ماهواره‌ای جایگزین
+        var satelliteBackup = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', {
+            attribution: 'Tiles © Esri',
+            maxZoom: 19
+        });
+        var emptyLayer = L.tileLayer('', {}); // لایه خالی
+        // مقداردهی اولیه نقشه با emptyLayer
+        emptyLayer.addTo(map);
+        var currentBaseLayer = emptyLayer;
+        // پس‌زمینه نقشه را از ابتدا سفید کن
+        setTimeout(function() {
+            var mapDiv = document.getElementById('map');
+            if (mapDiv) mapDiv.style.background = '#fff';
+        }, 0);
+
+        // --- کنترل سفارشی انتخاب نقشه ---
+        var mapSelectorBtn = document.getElementById('map-selector-btn');
+        var mapSelectorDropdown = document.getElementById('map-selector-dropdown');
+        // اضافه کردن گزینه بدون نقشه به dropdown
+        if (!document.getElementById('map-base-none')) {
+            var noneLabel = document.createElement('label');
+            noneLabel.style = 'display: flex; align-items: flex-start; width: 180px; text-align: right; padding: 6px 0px; cursor: pointer; direction: rtl;';
+            var noneRadio = document.createElement('input');
+            noneRadio.type = 'radio';
+            noneRadio.name = 'map-base';
+            noneRadio.value = 'none';
+            noneRadio.id = 'map-base-none';
+            noneRadio.style = 'margin-left: 8px; accent-color: #1b3a5c; width: 18px; height: 18px;';
+            noneRadio.checked = true; // پیش‌فرض انتخاب شده
+            noneLabel.appendChild(noneRadio);
+            noneLabel.appendChild(document.createTextNode('بدون نقشه'));
+            mapSelectorDropdown.insertBefore(noneLabel, mapSelectorDropdown.firstChild);
+        }
+        // --- باز و بسته شدن منوی انتخاب نقشه ---
+        mapSelectorBtn.onclick = function(e) {
+            mapSelectorDropdown.style.display = (mapSelectorDropdown.style.display === 'none' ? 'block' : 'none');
+        };
+        document.addEventListener('click', function(e) {
+            if (!mapSelectorBtn.contains(e.target) && !mapSelectorDropdown.contains(e.target)) {
+                mapSelectorDropdown.style.display = 'none';
+            }
+        });
+
+        // --- کنترل سفارشی انتخاب لایه‌ها ---
+        var layersSelectorBtn = document.getElementById('layers-selector-btn');
+        var layersSelectorDropdown = document.getElementById('layers-selector-dropdown');
+        // --- باز و بسته شدن منوی انتخاب لایه‌ها ---
+        layersSelectorBtn.onclick = function(e) {
+            layersSelectorDropdown.style.display = (layersSelectorDropdown.style.display === 'none' ? 'block' : 'none');
+        };
+        document.addEventListener('click', function(e) {
+            if (!layersSelectorBtn.contains(e.target) && !layersSelectorDropdown.contains(e.target)) {
+                layersSelectorDropdown.style.display = 'none';
+            }
+        });
+        var radios = mapSelectorDropdown.querySelectorAll('input[type=radio][name=map-base]');
+        radios.forEach(function(radio) {
+            radio.addEventListener('change', function() {
+                if (this.checked) {
+                    if (this.value === 'osm' && currentBaseLayer !== osm) {
+                        map.removeLayer(currentBaseLayer);
+                        osm.addTo(map);
+                        currentBaseLayer = osm;
+                        document.getElementById('map').style.background = '';
+                    } else if (this.value === 'satellite' && currentBaseLayer !== satellite) {
+                        map.removeLayer(currentBaseLayer);
+                        // تلاش برای بارگذاری نقشه ماهواره‌ای اصلی
+                        satellite.on('tileerror', function() {
+                            console.log('Satellite map failed, trying backup...');
+                            map.removeLayer(satellite);
+                            satelliteBackup.addTo(map);
+                            currentBaseLayer = satelliteBackup;
+                        });
+                        satellite.addTo(map);
+                        currentBaseLayer = satellite;
+                        document.getElementById('map').style.background = '';
+                    } else if (this.value === 'none' && currentBaseLayer !== emptyLayer) {
+                        map.removeLayer(currentBaseLayer);
+                        currentBaseLayer = emptyLayer;
+                        document.getElementById('map').style.background = '#fff';
+                    }
+                }
+                mapSelectorDropdown.style.display = 'none';
+            });
+        });
+
+        function updateLines(lines) {
+            var linesList = document.getElementById('lines-list');
+            linesList.innerHTML = '';
+            // گروه‌بندی خطوط بر اساس ولتاژ
+            var groups = {};
+            lines.forEach(function(line) {
+                var voltage = (line.voltage ? String(line.voltage).trim() : '0');
+                if (!groups[voltage]) groups[voltage] = [];
+                groups[voltage].push(line);
+            });
+            // ترتیب نمایش ولتاژها (بزرگ به کوچک)
+            var voltageOrder = Object.keys(groups).sort(function(a, b) { return parseInt(b) - parseInt(a); });
+            voltageOrder.forEach(function(voltage) {
+                // جداکننده با عنوان ولتاژ و چک‌باکس گروهی
+                var sep = document.createElement('div');
+                sep.className = 'voltage-separator';
+                sep.style.display = 'flex';
+                sep.style.alignItems = 'center';
+                var groupCheckbox = document.createElement('input');
+                groupCheckbox.type = 'checkbox';
+                groupCheckbox.style.marginLeft = '10px';
+                groupCheckbox.checked = true;
+                groupCheckbox.id = 'group_' + voltage;
+                sep.appendChild(groupCheckbox);
+                var sepLabel = document.createElement('span');
+                sepLabel.innerText = 'خطوط ' + voltage + ' کیلوولت';
+                sep.appendChild(sepLabel);
+                linesList.appendChild(sep);
+                // خطوط این گروه را بر اساس حروف الفبا مرتب کن
+                var sortedLines = groups[voltage].slice().sort(function(a, b) {
+                    return a.name.localeCompare(b.name, 'fa');
+                });
+                // آرایه‌ای برای چک‌باکس‌های خطوط این گروه
+                var lineCheckboxes = [];
+                sortedLines.forEach(function(line) {
+                    var id = 'line_' + btoa(unescape(encodeURIComponent(line.name))).replace(/=/g, '');
+                    var div = document.createElement('div');
+                    div.className = 'line-checkbox-row';
+                    var checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = id;
+                    checkbox.value = line.name;
+                    checkbox.checked = true;
+                    checkbox.onchange = function() {
+                        if (checkbox.checked) {
+                            selectedLines.add(line.name);
+                            // به محض فعال شدن هر خط، چشم باز شود
+                            allLinesVisible = true;
+                            var icon = document.getElementById('toggle-all-lines-icon');
+                            icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5zm0 13c-3.87 0-7.19-2.54-8.48-6C4.81 7.54 8.13 5 12 5s7.19 2.54 8.48 6c-1.29 3.46-4.61 6-8.48 6zm0-10a4 4 0 100 8 4 4 0 000-8zm0 6.5A2.5 2.5 0 1114.5 12 2.5 2.5 0 0112 14.5z"/>';
+                        } else {
+                            selectedLines.delete(line.name);
+                        }
+                        // همگام‌سازی وضعیت چک‌باکس گروه
+                        var allChecked = lineCheckboxes.every(function(cb) { return cb.checked; });
+                        var noneChecked = lineCheckboxes.every(function(cb) { return !cb.checked; });
+                        groupCheckbox.checked = allChecked;
+                        groupCheckbox.indeterminate = !allChecked && !noneChecked;
+                        filterTowers();
+                    };
+                    selectedLines.add(line.name);
+                    lineCheckboxes.push(checkbox);
+                    var label = document.createElement('label');
+                    label.htmlFor = id;
+                    label.innerText = line.name;
+                    div.appendChild(checkbox);
+                    div.appendChild(label);
+                    linesList.appendChild(div);
+                });
+                // رویداد چک‌باکس گروهی
+                groupCheckbox.addEventListener('change', function() {
+                    var checked = groupCheckbox.checked;
+                    lineCheckboxes.forEach(function(cb) {
+                        cb.checked = checked;
+                        if (checked) {
+                            selectedLines.add(cb.value);
+                        } else {
+                            selectedLines.delete(cb.value);
+                        }
+                    });
+                    groupCheckbox.indeterminate = false;
+                    filterTowers();
+                });
+            });
+            filterTowers();
+            // اگر همه خطوط انتخاب بودند، allLinesVisible = true وگرنه false و آیکون را sync کن.
+            var allLinesVisible = lineCheckboxes.every(function(cb) { return cb.checked; });
+            var icon = document.getElementById('toggle-all-lines-icon');
+            if (allLinesVisible) {
+                icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5zm0 13c-3.87 0-7.19-2.54-8.48-6C4.81 7.54 8.13 5 12 5s7.19 2.54 8.48 6c-1.29 3.46-4.61 6-8.48 6zm0-10a4 4 0 100 8 4 4 0 000-8zm0 6.5A2.5 2.5 0 1114.5 12 2.5 2.5 0 0112 14.5z"/>';
+            } else {
+                icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c.46 1.17 1.09 2.26 1.86 3.22l-1.42 1.42A1 1 0 002 18.5a1 1 0 001.41 0l16-16A1 1 0 0018.5 2a1 1 0 000 1.41l-1.42 1.42C19.19 7.54 22.51 10.08 23.8 13.54c-1.29 3.46-4.61 6-8.48 6-1.61 0-3.13-.37-4.48-1.02l-1.42 1.42A1 1 0 002 21.5a1 1 0 001.41 0l16-16A1 1 0 0018.5 2a1 1 0 000 1.41l-1.42 1.42C19.19 7.54 22.51 10.08 23.8 13.54c-1.29 3.46-4.61 6-8.48 6z"/>';
+            }
+            // در انتهای updateLines (بعد از filterTowers):
+            var allCheckboxes = linesList.querySelectorAll('input[type=checkbox][value]');
+            var allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+            var noneChecked = Array.from(allCheckboxes).every(cb => !cb.checked);
+            allLinesVisible = allChecked;
+            var icon = document.getElementById('toggle-all-lines-icon');
+            if (allChecked) {
+                icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5zm0 13c-3.87 0-7.19-2.54-8.48-6C4.81 7.54 8.13 5 12 5s7.19 2.54 8.48 6c-1.29 3.46-4.61 6-8.48 6zm0-10a4 4 0 100 8 4 4 0 000-8zm0 6.5A2.5 2.5 0 1114.5 12 2.5 2.5 0 0112 14.5z"/>';
+            } else {
+                if (!noneChecked) {
+                    icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5zm0 13c-3.87 0-7.19-2.54-8.48-6C4.81 7.54 8.13 5 12 5s7.19 2.54 8.48 6c-1.29 3.46-4.61 6-8.48 6zm0-10a4 4 0 100 8 4 4 0 000-8zm0 6.5A2.5 2.5 0 1114.5 12 2.5 2.5 0 0112 14.5z"/>';
+                } else {
+                    icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c.46 1.17 1.09 2.26 1.86 3.22l-1.42 1.42A1 1 0 002 18.5a1 1 0 001.41 0l16-16A1 1 0 0018.5 2a1 1 0 000 1.41l-1.42 1.42C19.19 7.54 22.51 10.08 23.8 13.54c-1.29 3.46-4.61 6-8.48 6-1.61 0-3.13-.37-4.48-1.02l-1.42 1.42A1 1 0 002 21.5a1 1 0 001.41 0l16-16A1 1 0 0018.5 2a1 1 0 000 1.41l-1.42 1.42C19.19 7.54 22.51 10.08 23.8 13.54c-1.29 3.46-4.61 6-8.48 6z"/>';
+                }
+            }
+        }
+
+        function filterTowers() {
+            var filtered = allTowers.filter(function(tower) {
+                return selectedLines.has(tower.name.split(' - خط ')[1]?.split(' (')[0]);
+            });
+            renderTowers(filtered, true);
+        }
+
+        // مقداردهی اولیه متغیرها مطابق وضعیت چک‌باکس‌ها
+        var showTowerLabels = document.getElementById('toggle-tower-labels').checked;
+        var showTowerPaths = document.getElementById('toggle-tower-paths').checked;
+        var showTowerMarkers = document.getElementById('toggle-tower-markers').checked;
+
+        document.getElementById('toggle-tower-labels').addEventListener('change', function(e) {
+            showTowerLabels = e.target.checked;
+            renderTowers(currentTowers, false);
+        });
+        document.getElementById('toggle-tower-paths').addEventListener('change', function(e) {
+            showTowerPaths = e.target.checked;
+            renderTowers(currentTowers, false);
+        });
+        document.getElementById('toggle-tower-markers').addEventListener('change', function(e) {
+            showTowerMarkers = e.target.checked;
+            renderTowers(currentTowers, false);
+        });
+        var currentTowers = [];
+        var polylines = L.layerGroup().addTo(map);
+        function renderTowers(towers, fitBounds = false) {
+            markers.clearLayers();
+            polylines.clearLayers();
+            currentTowers = towers;
+            // گروه‌بندی دکل‌ها بر اساس خط
+            var towersByLine = {};
+            towers.forEach(function(tower) {
+                // استخراج نام خط
+                var lineName = tower.name.split(' - خط ')[1]?.split(' (')[0] || 'نامشخص';
+                if (!towersByLine[lineName]) towersByLine[lineName] = [];
+                towersByLine[lineName].push(tower);
+            });
+            // رسم مسیر خطوط (polyline)
+            if (showTowerPaths) {
+                Object.keys(towersByLine).forEach(function(lineName) {
+                    var lineTowers = towersByLine[lineName].slice();
+                    // مرتب‌سازی بر اساس شماره دکل (عدد صحیح)
+                    lineTowers.sort(function(a, b) {
+                        var na = parseInt(a.name.split(' ')[1]);
+                        var nb = parseInt(b.name.split(' ')[1]);
+                        return na - nb;
+                    });
+                    // حذف شماره‌های تکراری (فقط اولین مختصات هر شماره)
+                    var seen = {};
+                    var latlngs = [];
+                    lineTowers.forEach(function(t) {
+                        var num = t.name.split(' ')[1];
+                        if (!seen[num]) {
+                            latlngs.push([t.lat, t.lng]);
+                            seen[num] = true;
+                        }
+                    });
+                    if (latlngs.length > 1) {
+                        var voltage = (lineTowers[0]?.voltage ? String(lineTowers[0].voltage).trim() : '0');
+                        var color = '#808080';
+                        switch(voltage) {
+                            case '400': color = '#8000ff'; break;
+                            case '230': color = '#ff0000'; break;
+                            case '132': color = '#00cc44'; break;
+                            case '63': color = '#3388ff'; break;
+                        }
+                        var poly = L.polyline(latlngs, {color: color, weight: 4, opacity: 0.7, smoothFactor: 1.2}).addTo(polylines);
+                        // --- افکت هاور برای خطوط ---
+                        var labelId = 'line-label-' + btoa(unescape(encodeURIComponent(lineName)));
+                        poly.on('mouseover', function(e) {
+                            this.setStyle({color: color, weight: 5, opacity: 1});
+                            this.bringToFront();
+                            var label = document.getElementById(labelId);
+                            if (label) {
+                                label.style.color = color;
+                                label.style.fontWeight = 'normal';
+                                label.style.fontSize = '14px';
+                                label.style.textShadow = '0 2px 8px #fff, 0 0 2px ' + color;
+                            }
+                        });
+                        poly.on('mouseout', function(e) {
+                            this.setStyle({color: color, weight: 4, opacity: 0.7});
+                            var label = document.getElementById(labelId);
+                            if (label) {
+                                label.style.color = '#222';
+                                label.style.fontWeight = 'normal';
+                                label.style.fontSize = '14px';
+                                label.style.textShadow = '';
+                            }
+                        });
+                        // --- لیبل ساده نام خط وسط مسیر ---
+                        var midIdx = Math.floor(latlngs.length / 2);
+                        var midLatLng = latlngs[midIdx];
+                        if (midLatLng) {
+                            var lineLabel = L.marker(midLatLng, {
+                                icon: L.divIcon({
+                                    className: 'line-name-label',
+                                    html: `<div id="${labelId}" style=\"font-family:Vazir,Tahoma,sans-serif;font-size:14px;color:#222;font-weight:normal;white-space:nowrap;\">${lineName}</div>`
+                                }),
+                                interactive: false
+                            }).addTo(polylines);
+                        }
+                        // در رویداد کلیک روی خط:
+                        poly.on('click', function(e) {
+                            // غیرفعال کردن popup خط وقتی ابزار فعال است
+                            if (toolbarState) {
+                                e.originalEvent.stopPropagation();
+                                return false;
+                            }
+                            
+                            var allLines = window.allLinesInfo || [];
+                            var match = allLines.find(l =>
+                                (l.Line_Name || '').trim().toLowerCase() === (lineName || '').trim().toLowerCase()
+                            );
+                            // Only include the details in html, not the title or separator
+                            var html = '';
+                            if (match) {
+                                var info = match;
+                                html += '<div class="line-popup-details" style="font-family:Vazir,Tahoma,sans-serif;font-size:12pt;text-align:center;">' +
+                                    '<div><span style="font-weight:normal;">کد خط:</span> ' + (info.Line_Code || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">کد دیسپاچینگ:</span> ' + (info.Dispatch_Code || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">تعداد مدار:</span> ' + (info.Circuit_Number || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">تعداد باندل:</span> ' + (info.Bundle_Number || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">طول خط:</span> ' + (info.Line_Length || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">طول مدار:</span> ' + (info.Circuit_Length || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">نوع دکل:</span> ' + (info.Tower_Type || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">نوع سیم:</span> ' + (info.Wire_Type || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">تعداد کل دکل‌ها:</span> ' + (info.Total_Towers || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">دکل‌های کششی:</span> ' + (info.Tension_Towers || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">دکل‌های آویزی:</span> ' + (info.Suspension_Towers || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">دشت:</span> ' + (info.Plain_Area || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">نیمه کوهستانی:</span> ' + (info.Semi_Mountainous_Area || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">صعب‌العبور:</span> ' + (info.Rough_Terrain_Area || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">سال بهره‌برداری:</span> ' + (info.Operation_Year || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">سرپرست خط:</span> ' + (info.Team_Leader || '-') + '</div>' +
+                                    '<div><span style="font-weight:normal;">کارشناس خط:</span> ' + (info.Line_Expert || '-') + '</div>' +
+                                    '</div>';
+                            }
+                            if (window.pyHandler && window.pyHandler.showLineInfoDialog) {
+                                window.pyHandler.showLineInfoDialog(lineName, html);
+                            } else if (window.qt && window.qt.webChannelTransport) {
+                                new QWebChannel(window.qt.webChannelTransport, function(channel) {
+                                    window.pyHandler = channel.objects.pyHandler;
+                                    window.pyHandler.showLineInfoDialog(lineName, html);
+                                });
+                            } else {
+                                alert('امکان نمایش دیالوگ وجود ندارد.');
+                            }
+                        });
+                    }
+                });
+            }
+            // رسم مارکرها و لیبل‌ها
+            if (showTowerMarkers) {
+                towers.forEach(function(tower, idx) {
+                    let color;
+                    let voltage = (tower.voltage ? String(tower.voltage).trim() : '0');
+                    switch(voltage) {
+                        case '400': color = '#8000ff'; break;
+                        case '230': color = '#ff0000'; break;
+                        case '132': color = '#00cc44'; break;
+                        case '63': color = '#3388ff'; break;
+                        default: color = '#808080';
+                    }
+                    // یک id یکتا برای هر مارکر
+                    let markerId = 'tower-marker-' + idx;
+                    let markerIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div id="${markerId}" style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; transition: box-shadow 0.2s, filter 0.2s;"></div>`,
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    });
+                    let voltageText = tower.voltage ? `${tower.voltage} کیلوولت ` : '';
+                    let lineName = tower.name.split(' - خط ')[1]?.split(' (')[0] || '';
+                    let towerNumber = tower.name.split(' ')[1] || '';
+                    let popupTitle = `خط ${voltageText}${lineName} دکل ${towerNumber}`;
+                    let marker = L.marker([tower.lat, tower.lng], { icon: markerIcon })
+                        .bindPopup(`
+                            <style>
+                                .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+                                    width: 420px !important;
+                                    max-width: 95vw !important;
+                                }
+                                .leaflet-popup-content {
+                                    width: 380px !important;
+                                    max-width: 95vw !important;
+                                }
+                            </style>
+                            <div class="tower-popup">
+                                <div class="popup-title" style="font-weight:normal;">${popupTitle}</div>
+                                <div class="popup-section">
+                                    <div><span style="font-weight:normal;">ساختار دکل:</span> <span style="font-weight:normal;">${tower.tower_structure || '-'}</span></div>
+                                    <div><span style="font-weight:normal;">نوع دکل:</span> <span style="font-weight:normal;">${tower.tower_type || '-'}</span></div>
+                                    <div><span style="font-weight:normal;">نوع پایه:</span> <span style="font-weight:normal;">${tower.base_type || '-'}</span></div>
+                                </div>
+                            </div>
+                        `)
+                        .addTo(markers);
+                    
+                    // غیرفعال کردن popup وقتی ابزار فعال است
+                    marker.on('click', function(e) {
+                        if (toolbarState) {
+                            e.originalEvent.stopPropagation();
+                            return false;
+                        }
+                    });
+                    // --- افکت هاور برای مارکر ---
+                    marker.on('mouseover', function() {
+                        var el = document.getElementById(markerId);
+                        if (el) {
+                            el.style.boxShadow = '0 0 0 6px rgba(0,0,0,0.10)';
+                            el.style.filter = 'brightness(1.5)';
+                            el.style.transform = 'scale(1.2)';
+                            el.style.zIndex = 1000;
+                        }
+                    });
+                    marker.on('mouseout', function() {
+                        var el = document.getElementById(markerId);
+                        if (el) {
+                            el.style.boxShadow = '';
+                            el.style.filter = '';
+                            el.style.transform = '';
+                            el.style.zIndex = '';
+                        }
+                    });
+                    if (showTowerLabels) {
+                        let towerNumber = tower.name.split(' ')[1];
+                        let labelIcon = L.divIcon({
+                            className: 'tower-label-icon',
+                            html: `<div style="font-family: Vazir, Tahoma, sans-serif; color: #222; margin-left: 8px;">${towerNumber}</div>`,
+                            iconSize: [32, 20],
+                            iconAnchor: [-8, 10]
+                        });
+                        L.marker([tower.lat, tower.lng], { icon: labelIcon, interactive: false }).addTo(markers);
+                    }
+                });
+            }
+            if (fitBounds && towers.length > 0) {
+                var bounds = L.latLngBounds(towers.map(t => [t.lat, t.lng]));
+                var panel = document.getElementById('lines-panel');
+                var panelRect = panel.getBoundingClientRect();
+                var paddingTopLeft = [panelRect.width + 40, 50];
+                var paddingBottomRight = [500, 150];
+                map.fitBounds(bounds, { paddingTopLeft: paddingTopLeft, paddingBottomRight: paddingBottomRight });
+            }
+        }
+
+        function updateTowers(towers) {
+            allTowers = towers;
+            filterTowers();
+        }
+
+        // --- Custom Modal Dialog Functions ---
+        // (Remove showLineInfoModal, hideLineInfoModal, and related code)
+
+        // --- ابزارهای نوار ابزار نقشه ---
+        let toolbarState = null;
+        let tempLayerGroup = L.layerGroup().addTo(map);
+        let tempPoints = [];
+        let tempLines = [];
+        let tempPolygon = null;
+        let tempTooltip = null;
+        let areaFixedLabelsLayer = L.layerGroup().addTo(map); // لایه لیبل‌های ثابت
+
+        // Helper: reset all temp layers
+        function clearTempLayers() {
+            tempLayerGroup.clearLayers();
+            tempPoints = [];
+            tempLines = [];
+            tempPolygon = null;
+            liveLine = null;
+            if (tempTooltip) {
+                map.getContainer().removeChild(tempTooltip);
+                tempTooltip = null;
+            }
+            areaFixedLabelsLayer.clearLayers(); // لیبل‌های ثابت را هم پاک کن
+        }
+        
+        // Helper: محاسبه مساحت
+        function calculateArea(points) {
+            if (points.length < 3) return 0;
+            
+            // تبدیل نقاط به آرایه‌ای از آرایه‌ها
+            let pointsArray = points.map(point => [point.lat, point.lng]);
+            
+            // بررسی اینکه آیا کتابخانه بارگذاری شده است
+            if (typeof L.GeometryUtil !== 'undefined' && L.GeometryUtil.geodesicArea) {
+                return L.GeometryUtil.geodesicArea(pointsArray);
+            } else {
+                // محاسبه ساده مساحت (تقریبی)
+                let area = 0;
+                for (let i = 0; i < pointsArray.length; i++) {
+                    let j = (i + 1) % pointsArray.length;
+                    area += pointsArray[i][0] * pointsArray[j][1];
+                    area -= pointsArray[j][0] * pointsArray[i][1];
+                }
+                area = Math.abs(area) / 2;
+                // تبدیل به متر مربع (تقریبی)
+                return area * 111320 * 111320; // 1 درجه ≈ 111320 متر
+            }
+        }
+
+        // Helper: فرمت عدد با کاما (سه رقم سه رقم)
+        function formatNumberWithCommas(x) {
+            return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        function setCrosshairCursor(enable) {
+            var mapDiv = map.getContainer();
+            if (enable) {
+                mapDiv.classList.add('crosshair-cursor');
+            } else {
+                mapDiv.classList.remove('crosshair-cursor');
+            }
+        }
+
+        // Helper: deactivate all buttons
+        function deactivateToolbarBtns() {
+            document.querySelectorAll('.toolbar-btn').forEach(btn => btn.classList.remove('active'));
+            toolbarState = null;
+            setCrosshairCursor(false);
+            // مخفی کردن نمایش زنده مختصات و اندازه‌گیری
+            document.getElementById('live-coordinates').style.display = 'none';
+            document.getElementById('live-measurement').style.display = 'none';
+        }
+
+        // --- زوم این ---
+        document.getElementById('zoom-in-btn').onclick = function() {
+            map.zoomIn();
+        };
+        // --- زوم اوت ---
+        document.getElementById('zoom-out-btn').onclick = function() {
+            map.zoomOut();
+        };
+
+        // --- زوم در ناحیه ---
+        document.getElementById('zoom-box-btn').onclick = function() {
+            if (toolbarState === 'zoom-box') {
+                deactivateToolbarBtns();
+                return;
+            }
+            deactivateToolbarBtns();
+            this.classList.add('active');
+            toolbarState = 'zoom-box';
+            setCrosshairCursor(true); // اضافه شد: اشاره‌گر موس به بعلاوه
+            let start = null, box = null;
+            function onMouseDown(e) {
+                if (toolbarState !== 'zoom-box') return;
+                start = e.latlng;
+                box = L.rectangle([start, start], {color: '#1b3a5c', weight: 2, dashArray: '6 4', fill: false}).addTo(tempLayerGroup);
+                map.dragging.disable();
+                map.on('mousemove', onMouseMove);
+                map.on('mouseup', onMouseUp);
+            }
+            function onMouseMove(e) {
+                if (!start || !box) return;
+                box.setBounds([start, e.latlng]);
+            }
+            function onMouseUp(e) {
+                if (!start || !box) return;
+                let bounds = box.getBounds();
+                map.fitBounds(bounds);
+                clearTempLayers();
+                map.dragging.enable();
+                map.off('mousemove', onMouseMove);
+                map.off('mouseup', onMouseUp);
+                // ابزار فعال بماند و دوباره منتظر mousedown باشد
+                map.once('mousedown', onMouseDown);
+            }
+            map.once('mousedown', onMouseDown);
+        };
+
+        // --- اندازه گیری فاصله ---
+        document.getElementById('measure-distance-btn').onclick = function() {
+            if (toolbarState === 'measure-distance') {
+                deactivateToolbarBtns();
+                return;
+            }
+            deactivateToolbarBtns();
+            this.classList.add('active');
+            toolbarState = 'measure-distance';
+            clearTempLayers();
+            setCrosshairCursor(true);
+            // مقدار distance-value را صفر کن
+            document.getElementById('distance-value').textContent = '0';
+            // نمایش بخش اندازه‌گیری
+            document.getElementById('live-coordinates').style.display = 'block';
+            document.getElementById('live-measurement').style.display = 'block';
+            document.getElementById('live-distance').style.display = 'block';
+            document.getElementById('live-area').style.display = 'none';
+        };
+        // --- اندازه گیری مساحت ---
+        document.getElementById('measure-area-btn').onclick = function() {
+            if (toolbarState === 'measure-area') {
+                deactivateToolbarBtns();
+                return;
+            }
+            deactivateToolbarBtns();
+            this.classList.add('active');
+            toolbarState = 'measure-area';
+            clearTempLayers();
+            setCrosshairCursor(true);
+            // نمایش بخش اندازه‌گیری
+            document.getElementById('live-coordinates').style.display = 'block';
+            document.getElementById('live-measurement').style.display = 'block';
+            document.getElementById('live-distance').style.display = 'none';
+            document.getElementById('live-area').style.display = 'block';
+        };
+        // --- نمایش مختصات ---
+        document.getElementById('coordinates-btn').onclick = function() {
+            if (toolbarState === 'coordinates') {
+                deactivateToolbarBtns();
+                return;
+            }
+            deactivateToolbarBtns();
+            this.classList.add('active');
+            toolbarState = 'coordinates';
+            clearTempLayers();
+            setCrosshairCursor(true);
+            
+            // نمایش زنده مختصات
+            document.getElementById('live-coordinates').style.display = 'block';
+        };
+        // --- پاک کردن ---
+        document.getElementById('clear-btn').onclick = function() {
+            deactivateToolbarBtns();
+            clearTempLayers();
+            // مخفی کردن نمایش زنده مختصات
+            document.getElementById('live-coordinates').style.display = 'none';
+        };
+
+        // --- رویداد mousemove برای نمایش زنده مختصات و خطوط ---
+        let liveLine = null;
+        map.on('mousemove', function(e) {
+            // همیشه مختصات را نمایش بده
+            document.getElementById('live-lat').textContent = e.latlng.lat.toFixed(6);
+            document.getElementById('live-lng').textContent = e.latlng.lng.toFixed(6);
+            
+            if (toolbarState === 'measure-distance' && tempPoints.length > 0) {
+                // نمایش زنده خط از آخرین نقطه به موس
+                if (liveLine) {
+                    tempLayerGroup.removeLayer(liveLine);
+                }
+                // محاسبه طول پاره‌خط زنده
+                let lastPoint = tempPoints[tempPoints.length - 1];
+                let liveSegLength = map.distance(lastPoint, e.latlng);
+                let midLat = (lastPoint.lat + e.latlng.lat) / 2;
+                let midLng = (lastPoint.lng + e.latlng.lng) / 2;
+                let liveSegLabelText = '';
+                if (liveSegLength < 1000) {
+                    liveSegLabelText = liveSegLength.toFixed(0) + 'm';
+                } else {
+                    liveSegLabelText = (liveSegLength / 1000).toFixed(1) + 'km';
+                }
+                let liveSegLabel = L.marker([midLat, midLng], {
+                    icon: L.divIcon({
+                        className: 'segment-length-label',
+                        html: `<div style="font-family:'Vazir',Tahoma,sans-serif;font-size:12px;color:#017BCC;background:#fff;padding:2px 8px;border-radius:8px;box-shadow:0 2px 8px rgba(1,123,204,0.10);border:1px solid #e0e0e0;">${liveSegLabelText}</div>`,
+                        iconSize: [60, 22],
+                        iconAnchor: [30, 11]
+                    })
+                });
+                liveLine = L.layerGroup([
+                    L.polyline([lastPoint, e.latlng], {
+                        color: '#1b3a5c',
+                        weight: 3,
+                        dashArray: '6 4',
+                        opacity: 0.7
+                    }),
+                    liveSegLabel
+                ]).addTo(tempLayerGroup);
+                
+                // محاسبه و نمایش زنده فاصله
+                let total = 0;
+                for (let i = 1; i < tempPoints.length; i++) {
+                    total += map.distance(tempPoints[i-1], tempPoints[i]);
+                }
+                total += map.distance(tempPoints[tempPoints.length - 1], e.latlng);
+                
+                document.getElementById('live-measurement').style.display = 'block';
+                document.getElementById('live-distance').style.display = 'block';
+                document.getElementById('live-area').style.display = 'none';
+                let totalText = '';
+                if (total < 1000) {
+                    totalText = total.toFixed(1) + ' متر';
+                } else {
+                    totalText = (total / 1000).toFixed(1) + ' کیلومتر';
+                }
+                document.getElementById('distance-value').textContent = totalText;
+                
+            } else if (toolbarState === 'measure-area' && tempPoints.length > 0) {
+                if (liveLine) {
+                    tempLayerGroup.removeLayer(liveLine);
+                }
+                let lines = [];
+                let n = tempPoints.length;
+                let tempLabels = [];
+                // خطوط بین نقاط ثبت‌شده (آبی تیره)
+                for (let i = 1; i < n; i++) {
+                    lines.push(L.polyline([tempPoints[i-1], tempPoints[i]], {
+                        color: '#1b3a5c',
+                        weight: 3,
+                        dashArray: '6 4',
+                        opacity: 0.7
+                    }));
+                }
+                // خط و لیبل از آخرین نقطه به موس (آبی تیره)
+                lines.push(L.polyline([tempPoints[n-1], e.latlng], {
+                    color: '#1b3a5c',
+                    weight: 3,
+                    dashArray: '6 4',
+                    opacity: 0.7
+                }));
+                let segLength1 = map.distance(tempPoints[n-1], e.latlng);
+                let midLat1 = (tempPoints[n-1].lat + e.latlng.lat) / 2;
+                let midLng1 = (tempPoints[n-1].lng + e.latlng.lng) / 2;
+                let segLabelText1 = segLength1 < 1000 ? segLength1.toFixed(0) + 'm' : (segLength1 / 1000).toFixed(1) + 'km';
+                let segLabel1 = L.marker([midLat1, midLng1], {
+                    icon: L.divIcon({
+                        className: 'segment-length-label',
+                        html: `<div style=\"font-family:'Vazir',Tahoma,sans-serif;font-size:12px;color:#1b3a5c;background:#fff;padding:2px 12px;border-radius:8px;box-shadow:0 2px 8px rgba(27,58,92,0.10);border:1px solid #e0e0e0;min-width:60px;text-align:center;\">${segLabelText1}</div>`,
+                        iconSize: [70, 22],
+                        iconAnchor: [35, 11]
+                    })
+                });
+                tempLabels.push(segLabel1);
+                // خط و لیبل از موس به نقطه اول (آبی تیره)
+                lines.push(L.polyline([e.latlng, tempPoints[0]], {
+                    color: '#1b3a5c',
+                    weight: 3,
+                    dashArray: '6 4',
+                    opacity: 0.7
+                }));
+                let segLength2 = map.distance(e.latlng, tempPoints[0]);
+                let midLat2 = (e.latlng.lat + tempPoints[0].lat) / 2;
+                let midLng2 = (e.latlng.lng + tempPoints[0].lng) / 2;
+                let segLabelText2 = segLength2 < 1000 ? segLength2.toFixed(0) + 'm' : (segLength2 / 1000).toFixed(1) + 'km';
+                let segLabel2 = L.marker([midLat2, midLng2], {
+                    icon: L.divIcon({
+                        className: 'segment-length-label',
+                        html: `<div style=\"font-family:'Vazir',Tahoma,sans-serif;font-size:12px;color:#1b3a5c;background:#fff;padding:2px 12px;border-radius:8px;box-shadow:0 2px 8px rgba(27,58,92,0.10);border:1px solid #e0e0e0;min-width:60px;text-align:center;\">${segLabelText2}</div>`,
+                        iconSize: [70, 22],
+                        iconAnchor: [35, 11]
+                    })
+                });
+                tempLabels.push(segLabel2);
+                // نمایش خطوط و لیبل‌های زنده
+                liveLine = L.layerGroup([...lines, ...tempLabels]);
+                liveLine.addTo(tempLayerGroup);
+                // محاسبه و نمایش زنده مساحت فقط در پایین
+                if (n > 1) {
+                    let tempPointsWithMouse = [...tempPoints, e.latlng];
+                    let area = calculateArea(tempPointsWithMouse);
+                    document.getElementById('live-measurement').style.display = 'block';
+                    document.getElementById('live-distance').style.display = 'none';
+                    document.getElementById('live-area').style.display = 'block';
+                    document.getElementById('area-value').textContent = formatNumberWithCommas(area.toFixed(1));
+                }
+            } else if (liveLine) {
+                // حذف خط زنده وقتی ابزار غیرفعال است
+                tempLayerGroup.removeLayer(liveLine);
+                liveLine = null;
+            }
+        });
+
+        // --- رویداد کلیک روی نقشه برای ابزارها ---
+        map.on('click', function(e) {
+            if (toolbarState === 'measure-distance') {
+                tempPoints.push(e.latlng);
+                let marker = L.circleMarker(e.latlng, {radius: 6, color: '#1b3a5c', fillColor: '#fff', fillOpacity: 1, weight: 2}).addTo(tempLayerGroup);
+                if (tempPoints.length > 1) {
+                    let p1 = tempPoints[tempPoints.length-2];
+                    let p2 = tempPoints[tempPoints.length-1];
+                    let line = L.polyline([p1, p2], {color: '#1b3a5c', weight: 3, dashArray: '6 4'}).addTo(tempLayerGroup);
+                    tempLines.push(line);
+                    // محاسبه طول پاره‌خط
+                    let segLength = map.distance(p1, p2);
+                    // محاسبه نقطه وسط پاره‌خط
+                    let midLat = (p1.lat + p2.lat) / 2;
+                    let midLng = (p1.lng + p2.lng) / 2;
+                    // لیبل طول پاره‌خط
+                    let segLabelText = '';
+                    if (segLength < 1000) {
+                        segLabelText = segLength.toFixed(0) + 'm';
+                    } else {
+                        segLabelText = (segLength / 1000).toFixed(1) + 'km';
+                    }
+                    let segLabel = L.marker([midLat, midLng], {
+                        icon: L.divIcon({
+                            className: 'segment-length-label',
+                            html: `<div style="font-family:'Vazir',Tahoma,sans-serif;font-size:12px;color:black;background:#fff;padding:2px 8px;border-radius:8px;box-shadow:0 2px 8px rgba(1,123,204,0.10);border:1px solid #e0e0e0;">${segLabelText}</div>`,
+                            iconSize: [60, 22],
+                            iconAnchor: [30, 11]
+                        })
+                    }).addTo(tempLayerGroup);
+                }
+                // حذف خط زنده وقتی نقطه جدید اضافه می‌شود
+                if (liveLine) {
+                    tempLayerGroup.removeLayer(liveLine);
+                    liveLine = null;
+                }
+                // مقداردهی به distance-value اینجا حذف شد
+            } else if (toolbarState === 'measure-area') {
+                tempPoints.push(e.latlng);
+                let marker = L.circleMarker(e.latlng, {radius: 6, color: '#1b3a5c', fillColor: '#fff', fillOpacity: 1, weight: 3}).addTo(tempLayerGroup);
+                // رسم خطوط بین نقاط ثبت شده (آبی تیره)
+                if (tempPoints.length > 1) {
+                    let line = L.polyline([tempPoints[tempPoints.length-2], tempPoints[tempPoints.length-1]], {
+                        color: '#1b3a5c',
+                        weight: 3,
+                        dashArray: '6 4',
+                        opacity: 0.7
+                    }).addTo(tempLayerGroup);
+                    tempLines.push(line);
+                    // لیبل طول ضلع ثبت‌شده (آبی تیره)
+                    let p1 = tempPoints[tempPoints.length-2];
+                    let p2 = tempPoints[tempPoints.length-1];
+                    let segLength = map.distance(p1, p2);
+                    let midLat = (p1.lat + p2.lat) / 2;
+                    let midLng = (p1.lng + p2.lng) / 2;
+                    let segLabelText = segLength < 1000 ? segLength.toFixed(0) + 'm' : (segLength / 1000).toFixed(1) + 'km';
+                    let segLabel = L.marker([midLat, midLng], {
+                        icon: L.divIcon({
+                            className: 'segment-length-label',
+                            html: `<div style=\"font-family:'Vazir',Tahoma,sans-serif;font-size:12px;color:#1b3a5c;background:#fff;padding:2px 12px;border-radius:8px;box-shadow:0 2px 8px rgba(27,58,92,0.10);border:1px solid #e0e0e0;min-width:60px;text-align:center;\">${segLabelText}</div>`,
+                            iconSize: [70, 22],
+                            iconAnchor: [35, 11]
+                        })
+                    });
+                    areaFixedLabelsLayer.addLayer(segLabel);
+                }
+                
+                if (tempPoints.length > 2) {
+                    if (tempPolygon) tempLayerGroup.removeLayer(tempPolygon);
+                    tempPolygon = L.polygon(tempPoints, {color: '#1b3a5c', weight: 2, fillColor: 'rgba(27,58,92,0.08)', fillOpacity: 1}).addTo(tempLayerGroup);
+                    // محاسبه مساحت (متر مربع) - فقط نقاط ثبت شده
+                    let area = calculateArea(tempPoints);
+                    document.getElementById('live-measurement').style.display = 'block';
+                    document.getElementById('live-distance').style.display = 'none';
+                    document.getElementById('live-area').style.display = 'block';
+                    document.getElementById('area-value').textContent = formatNumberWithCommas(area.toFixed(1));
+                }
+                
+                // حذف خطوط زنده وقتی نقطه جدید اضافه می‌شود
+                if (liveLine) {
+                    tempLayerGroup.removeLayer(liveLine);
+                    liveLine = null;
+                }
+            } else if (toolbarState === 'coordinates') {
+                clearTempLayers();
+                let marker = L.marker(e.latlng).addTo(tempLayerGroup);
+                let popup = marker.bindPopup('مختصات:<br>Lat: ' + e.latlng.lat.toFixed(6) + '<br>Lng: ' + e.latlng.lng.toFixed(6)).openPopup();
+                
+                // حذف مارکر وقتی popup بسته می‌شود
+                marker.on('popupclose', function() {
+                    tempLayerGroup.removeLayer(marker);
+                });
+            }
+        });
+        // دابل کلیک برای پایان اندازه‌گیری فاصله/مساحت
+        map.on('dblclick', function(e) {
+            if (toolbarState === 'measure-distance' || toolbarState === 'measure-area') {
+                deactivateToolbarBtns();
+                setCrosshairCursor(false);
+                // --- افزودن محاسبه فاصله نهایی برای measure-distance ---
+                if (toolbarState === 'measure-distance' && tempPoints.length > 1) {
+                    let total = 0;
+                    for (let i = 1; i < tempPoints.length; i++) {
+                        total += map.distance(tempPoints[i-1], tempPoints[i]);
+                    }
+                    let totalText = '';
+                    if (total < 1000) {
+                        totalText = formatNumberWithCommas(total.toFixed(1)) + ' متر';
+                    } else {
+                        totalText = formatNumberWithCommas((total / 1000).toFixed(1)) + ' کیلومتر';
+                    }
+                    document.getElementById('distance-value').textContent = totalText;
+                }
+            }
+        });
+        // هندل کلیدهای کیبورد
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                deactivateToolbarBtns();
+                clearTempLayers();
+            } else if (e.key === 'Enter') {
+                // پایان اندازه‌گیری با Enter (نمایش باقی بماند)
+                if (toolbarState === 'measure-distance' || toolbarState === 'measure-area') {
+                    document.querySelectorAll('.toolbar-btn').forEach(btn => btn.classList.remove('active'));
+                    // حذف خط زنده
+                    if (liveLine) {
+                        tempLayerGroup.removeLayer(liveLine);
+                        liveLine = null;
+                    }
+                    // لیبل مساحت و آخرین ضلع را در مرکز ثقل چندضلعی و روی آخرین ضلع ثبت کن
+                    if (toolbarState === 'measure-area' && tempPoints.length > 2) {
+                        let area = calculateArea(tempPoints);
+                        // مرکز ثقل چندضلعی
+                        let cx = 0, cy = 0, signedArea = 0;
+                        for (let i = 0; i < tempPoints.length; i++) {
+                            let j = (i + 1) % tempPoints.length;
+                            let xi = tempPoints[i].lat, yi = tempPoints[i].lng;
+                            let xj = tempPoints[j].lat, yj = tempPoints[j].lng;
+                            let a = xi * yj - xj * yi;
+                            signedArea += a;
+                            cx += (xi + xj) * a;
+                            cy += (yi + yj) * a;
+                        }
+                        signedArea *= 0.5;
+                        if (Math.abs(signedArea) > 1e-6) {
+                            cx /= (6 * signedArea);
+                            cy /= (6 * signedArea);
+                            let areaLabel = L.marker([cx, cy], {
+                                icon: L.divIcon({
+                                    className: 'segment-length-label',
+                                    html: `<div style=\"font-family:'Vazir',Tahoma,sans-serif;font-size:12px;color:#1b3a5c;background:#fff;padding:2px 24px;border-radius:8px;box-shadow:0 2px 8px rgba(27,58,92,0.10);border:1px solid #e0e0e0;min-width:110px;text-align:center;\">${formatNumberWithCommas(area.toFixed(0))}m2</div>`,
+                                    iconSize: [110, 32],
+                                    iconAnchor: [55, 16]
+                                })
+                            });
+                            areaFixedLabelsLayer.addLayer(areaLabel);
+                        }
+                        // مقدار مساحت پایین صفحه را نیز به‌روزرسانی کن
+                        document.getElementById('area-value').textContent = formatNumberWithCommas(area.toFixed(1));
+                        // ثبت آخرین ضلع (از آخرین نقطه به نقطه اول)
+                        let p1 = tempPoints[tempPoints.length-1];
+                        let p2 = tempPoints[0];
+                        let line = L.polyline([p1, p2], {
+                            color: '#1b3a5c',
+                            weight: 3,
+                            dashArray: '6 4',
+                            opacity: 0.7
+                        }).addTo(tempLayerGroup);
+                        tempLines.push(line);
+                        let segLength = map.distance(p1, p2);
+                        let midLat = (p1.lat + p2.lat) / 2;
+                        let midLng = (p1.lng + p2.lng) / 2;
+                        let segLabelText = segLength < 1000 ? segLength.toFixed(0) + 'm' : (segLength / 1000).toFixed(1) + 'km';
+                        let segLabel = L.marker([midLat, midLng], {
+                            icon: L.divIcon({
+                                className: 'segment-length-label',
+                                html: `<div style=\"font-family:'Vazir',Tahoma,sans-serif;font-size:12px;color:#1b3a5c;background:#fff;padding:2px 12px;border-radius:8px;box-shadow:0 2px 8px rgba(27,58,92,0.10);border:1px solid #e0e0e0;min-width:60px;text-align:center;\">${segLabelText}</div>`,
+                                iconSize: [70, 22],
+                                iconAnchor: [35, 11]
+                            })
+                        });
+                        areaFixedLabelsLayer.addLayer(segLabel);
+                    }
+                    // --- افزودن محاسبه فاصله نهایی برای measure-distance ---
+                    if (toolbarState === 'measure-distance' && tempPoints.length > 1) {
+                        let total = 0;
+                        for (let i = 1; i < tempPoints.length; i++) {
+                            total += map.distance(tempPoints[i-1], tempPoints[i]);
+                        }
+                        let totalText = '';
+                        if (total < 1000) {
+                            totalText = formatNumberWithCommas(total.toFixed(1)) + ' متر';
+                        } else {
+                            totalText = formatNumberWithCommas((total / 1000).toFixed(1)) + ' کیلومتر';
+                        }
+                        document.getElementById('distance-value').textContent = totalText;
+                    }
+                    toolbarState = null;
+                    setCrosshairCursor(false);
+                }
+            }
+        });
+        // leaflet-geometryutil برای محاسبه مساحت
+        if (typeof L.GeometryUtil === 'undefined') {
+            var script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet-geometryutil@0.9.3/src/leaflet.geometryutil.js';
+            script.onload = function() {
+                console.log('Leaflet GeometryUtil loaded successfully');
+            };
+            script.onerror = function() {
+                console.error('Failed to load Leaflet GeometryUtil');
+            };
+            document.head.appendChild(script);
+        }
+        document.getElementById('reset-view-btn').onclick = function() {
+            // اگر داده دکل‌ها بارگذاری شده و حداقل یکی وجود دارد، کل منطقه را نمایش بده
+            if (allTowers && allTowers.length > 0) {
+                var bounds = L.latLngBounds(allTowers.map(t => [t.lat, t.lng]));
+                map.fitBounds(bounds, {padding: [40, 40]});
+            } else {
+                map.setView([34.3142, 47.0650], 10);
+            }
+        };
+        // در ابتدای اسکریپت:
+        var allLinesVisible = true;
+        document.getElementById('toggle-all-lines-btn').onclick = function() {
+            var checkboxes = document.querySelectorAll('#lines-list input[type=checkbox][value]');
+            var anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+            if (anyChecked) {
+                // فقط خطوط فعال را غیرفعال کن
+                checkboxes.forEach(function(cb) {
+                    if (cb.checked) {
+                        cb.checked = false;
+                        selectedLines.delete(cb.value);
+                    }
+                });
+                allLinesVisible = false;
+            } else {
+                // همه خطوط را فعال کن
+                checkboxes.forEach(function(cb) {
+                    cb.checked = true;
+                    selectedLines.add(cb.value);
+                });
+                allLinesVisible = true;
+            }
+            // همه گروه‌ها را هم sync کن
+            document.querySelectorAll('#lines-list input[id^=group_]').forEach(function(cb) {
+                cb.indeterminate = false;
+                cb.checked = allLinesVisible;
+            });
+            filterTowers();
+            // تغییر آیکون چشم باز/بسته
+            var icon = document.getElementById('toggle-all-lines-icon');
+            if (allLinesVisible) {
+                icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5zm0 13c-3.87 0-7.19-2.54-8.48-6C4.81 7.54 8.13 5 12 5s7.19 2.54 8.48 6c-1.29 3.46-4.61 6-8.48 6zm0-10a4 4 0 100 8 4 4 0 000-8zm0 6.5A2.5 2.5 0 1114.5 12 2.5 2.5 0 0112 14.5z"/>';
+            } else {
+                icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c.46 1.17 1.09 2.26 1.86 3.22l-1.42 1.42A1 1 0 002 18.5a1 1 0 001.41 0l16-16A1 1 0 0018.5 2a1 1 0 000 1.41l-1.42 1.42C19.19 7.54 22.51 10.08 23.8 13.54c-1.29 3.46-4.61 6-8.48 6-1.61 0-3.13-.37-4.48-1.02l-1.42 1.42A1 1 0 002 21.5a1 1 0 001.41 0l16-16A1 1 0 0018.5 2a1 1 0 000 1.41l-1.42 1.42C19.19 7.54 22.51 10.08 23.8 13.54c-1.29 3.46-4.61 6-8.48 6z"/>';
+            }
+        };
+    </script>
+</body>
+</html>

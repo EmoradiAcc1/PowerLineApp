@@ -154,3 +154,23 @@ TowersInputDialog QComboBox QAbstractItemView {
     padding-right: 5px;
     direction: rtl;
 }
+
+
+/* استایل زیبا برای QProgressBar و QProgressDialog */
+QProgressDialog {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    font: 14pt "Vazir";
+}
+QProgressBar {
+    height: 30px;
+    border-radius: 8px;
+    font: bold 14px "Vazir";
+    text-align: center;
+    background: #eee;
+}
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4CAF50, stop:1 #2196F3);
+    border-radius: 8px;
+}

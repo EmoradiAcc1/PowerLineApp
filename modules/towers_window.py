@@ -1,56 +1,18 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QToolBar, QAction, QLineEdit, QLabel, QMessageBox, QStyle, QDialog, QFormLayout, QPushButton, QFileDialog, QHeaderView, QSizePolicy, QMenu, QApplication, QSpacerItem, QGroupBox, QScrollArea
-from PyQt5.QtCore import Qt, QEvent, QPoint
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QToolBar, QAction, QLineEdit, QLabel, QMessageBox, QStyle, QDialog, QFormLayout, QPushButton, QFileDialog, QHeaderView, QSizePolicy, QMenu, QApplication, QSpacerItem, QGroupBox, QScrollArea, QProgressDialog
+from PyQt5.QtCore import Qt, QEvent, QPoint, QTimer
 from PyQt5.QtGui import QFont, QIcon
-from database import Database
-from custom_widgets import NoWheelComboBox
+from modules.database import Database
+from modules.custom_widgets import NoWheelComboBox, CustomDialog_Progress, CustomTableWidget, CustomRightClick, TableActions
+from modules.custom_widgets import CustomDialog_Flexible
 import csv
 import re
 import pandas as pd
 import logging
 import traceback
+from collections import defaultdict
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# -----------------------------------------------
-# Filter Popover: A small widget for column-specific filtering
-# -----------------------------------------------
-class FilterPopover(QWidget):
-    def __init__(self, parent, column_index, column_name, current_filter, on_filter_changed):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.Popup)
-        self.column_index = column_index
-        self.column_name = column_name
-        self.on_filter_changed = on_filter_changed
-        self.setLayout(QVBoxLayout())
-        self.layout().setContentsMargins(5, 5, 5, 5)
-        self.setStyleSheet("background-color: white; border: 1px solid #ccc; border-radius: 4px;")
-
-        # Filter input
-        self.filter_input = QLineEdit()
-        self.filter_input.setFont(QFont("Vazir", 10))
-        self.filter_input.setPlaceholderText(f"فیلتر {column_name}")
-        self.filter_input.setStyleSheet("padding: 3px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
-        self.filter_input.setFixedWidth(150)
-        self.filter_input.setText(current_filter or "")
-        self.filter_input.textChanged.connect(self.apply_filter)
-        self.layout().addWidget(self.filter_input)
-
-        # Adjust size
-        self.adjustSize()
-
-    def apply_filter(self):
-        try:
-            filter_text = self.filter_input.text().strip()
-            logging.debug(f"Applying filter for column {self.column_index}: {filter_text}")
-            self.on_filter_changed(self.column_index, filter_text)
-        except Exception as e:
-            logging.error(f"Error in apply_filter: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در اعمال فیلتر: {str(e)}")
-
-    def focusOutEvent(self, event):
-        super().focusOutEvent(event)
-        self.close()
 
 # -----------------------------------------------
 # Input Dialog: A dialog for adding or editing tower information
@@ -70,13 +32,26 @@ class TowersInputDialog(QDialog):
         # Apply section title styling
         self.setStyleSheet("""
             QGroupBox {
-                font-weight: bold;
+                font-weight: normal;
             }
             QGroupBox::title {
                 color: rgb(1, 123, 204);
             }
         """)
+        combo_rtl_style = """
+            QComboBox {
+                height:38px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                background-color: white;
+            }
 
+            QComboBox QAbstractItemView {
+                border-radius: 4px;
+                border: 1px solid #b0b0b0;
+                background: white;
+                padding: 2px;
+            }"""
         # چیدمان اصلی با اسکرول
         self.scroll = QScrollArea()
         # Set a more compact dialog width and adjust widget sizes
@@ -222,12 +197,12 @@ class TowersInputDialog(QDialog):
         self.insulator_type_c1_r = NoWheelComboBox()
         self.insulator_type_c1_r.setFont(self.font)
         self.insulator_type_c1_r.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
-        self.insulator_type_c1_r.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.insulator_type_c1_r.setStyleSheet(combo_rtl_style)
         self.insulator_type_c1_r.setFixedWidth(widget_width)
         self.insulator_type_c2_r = NoWheelComboBox()
         self.insulator_type_c2_r.setFont(self.font)
         self.insulator_type_c2_r.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
-        self.insulator_type_c2_r.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.insulator_type_c2_r.setStyleSheet(combo_rtl_style)
         self.insulator_type_c2_r.setFixedWidth(widget_width)
         row6 = QHBoxLayout()
         row6.addWidget(QLabel("نوع مقره R مدار اول:", font=self.font))
@@ -241,12 +216,12 @@ class TowersInputDialog(QDialog):
         self.insulator_type_c1_s = NoWheelComboBox()
         self.insulator_type_c1_s.setFont(self.font)
         self.insulator_type_c1_s.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
-        self.insulator_type_c1_s.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.insulator_type_c1_s.setStyleSheet(combo_rtl_style)
         self.insulator_type_c1_s.setFixedWidth(widget_width)
         self.insulator_type_c2_s = NoWheelComboBox()
         self.insulator_type_c2_s.setFont(self.font)
         self.insulator_type_c2_s.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
-        self.insulator_type_c2_s.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.insulator_type_c2_s.setStyleSheet(combo_rtl_style)
         self.insulator_type_c2_s.setFixedWidth(widget_width)
         row7 = QHBoxLayout()
         row7.addWidget(QLabel("نوع مقره S مدار اول:", font=self.font))
@@ -260,12 +235,12 @@ class TowersInputDialog(QDialog):
         self.insulator_type_c1_t = NoWheelComboBox()
         self.insulator_type_c1_t.setFont(self.font)
         self.insulator_type_c1_t.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
-        self.insulator_type_c1_t.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.insulator_type_c1_t.setStyleSheet(combo_rtl_style)
         self.insulator_type_c1_t.setFixedWidth(widget_width)
         self.insulator_type_c2_t = NoWheelComboBox()
         self.insulator_type_c2_t.setFont(self.font)
         self.insulator_type_c2_t.addItems(["", "سرامیکی", "شیشه‌ای", "سیلیکونی"])
-        self.insulator_type_c2_t.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px; background-color: white;")
+        self.insulator_type_c2_t.setStyleSheet(combo_rtl_style)
         self.insulator_type_c2_t.setFixedWidth(widget_width)
         row8 = QHBoxLayout()
         row8.addWidget(QLabel("نوع مقره T مدار اول:", font=self.font))
@@ -413,6 +388,10 @@ class TowersInputDialog(QDialog):
         self.save_button.clicked.connect(self.save_tower)
         self.cancel_button.clicked.connect(self.reject)
 
+        # اشاره‌گر موس برای دکمه‌های ذخیره و لغو
+        self.save_button.setCursor(Qt.PointingHandCursor)
+        self.cancel_button.setCursor(Qt.PointingHandCursor)
+
     def adjust_dialog_size(self):
         """تنظیم خودکار اندازه دیالوگ بر اساس محتوای سکشن‌ها"""
         sections = [self.section1, self.section2, self.section3, self.section4, self.section5]
@@ -510,7 +489,8 @@ class TowersInputDialog(QDialog):
     def save_tower(self):
         is_valid, error_msg = self.validate_inputs()
         if not is_valid:
-            QMessageBox.warning(self, "خطا", error_msg)
+            dlg = CustomDialog_Flexible(header_text="خطا", main_text=error_msg, ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+            dlg.exec_()
             return
 
         def format_number(value):
@@ -558,12 +538,11 @@ class TowersWindow(QWidget):
         super().__init__(parent)
         self.db = Database()
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(20, 20, 20, 20)
+        self.layout.setContentsMargins(10, 10, 10, 10)  # کاهش margins
         self.layout.setSpacing(10)
         self.setLayoutDirection(Qt.RightToLeft)
         self.setStyleSheet("background-color: #f0f0f0;")
 
-        # Column filters
         self.column_filters = {}
         self.original_headers = [
             "نام خط", "شماره دکل", "ساختار دکل", "نوع دکل", "نوع پایه",
@@ -584,19 +563,19 @@ class TowersWindow(QWidget):
             "longitude", "latitude"
         ]
 
-        # Toolbar
         self.toolbar = QToolBar()
-        self.toolbar.setFont(QFont("Vazir", 18))
+        self.toolbar.setFont(QFont("Vazir", 12))
         self.toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.toolbar.setStyleSheet("""
             QToolBar { 
                 background-color: #e0e0e0; 
                 padding: 5px; 
-                spacing: 5px; 
+                spacing: 8px; 
                 border-radius: 8px;
             }
             QToolButton { 
                 margin: 2px; 
+                direction: ltr; 
                 background-color: transparent !important; 
                 border: none; 
                 padding: 2px; 
@@ -613,14 +592,17 @@ class TowersWindow(QWidget):
         """)
         self.layout.addWidget(self.toolbar)
 
-        self.add_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder)), "افزودن دکل جدید", self)
-        self.delete_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_TrashIcon)), "حذف", self)
-        self.edit_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_FileDialogContentsView)), "ویرایش", self)
-        self.import_excel_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_FileDialogStart)), "ورود اطلاعات از اکسل", self)
-        self.report_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView)), "خروجی گرفتن", self)
-        self.back_action = QAction(QIcon(self.style().standardIcon(QStyle.SP_ArrowBack)), "برگشت", self)
+        self.add_action = QAction(QIcon("resources/Icons/Add_Item.png"), "افزودن دکل جدید", self)
+        self.copy_action = QAction(QIcon("Resources/Icons/Toolsbar_Copy.png"), "کپی", self)
+        self.delete_action = QAction(QIcon("resources/Icons/Delete_Table.png"), "حذف", self)
+        self.edit_action = QAction(QIcon("resources/Icons/Edit_Table.png"), "ویرایش", self)
+        self.import_excel_action = QAction(QIcon("resources/Icons/Import_From_Excel.png"), "ورود اطلاعات از اکسل", self)
+        self.report_action = QAction(QIcon("resources/Icons/Export_From_Excel.png"), "خروج اطلاعات به اکسل", self)
+        self.back_action = QAction(QIcon("resources/Icons/Back.png"), "برگشت", self)
 
         self.toolbar.addAction(self.add_action)
+        self.toolbar.addSeparator().setText("|")
+        self.toolbar.addAction(self.copy_action)
         self.toolbar.addSeparator().setText("|")
         self.toolbar.addAction(self.delete_action)
         self.toolbar.addSeparator().setText("|")
@@ -633,98 +615,31 @@ class TowersWindow(QWidget):
         self.toolbar.addAction(self.back_action)
 
         self.add_action.triggered.connect(self.add_tower)
+        self.copy_action.triggered.connect(lambda: self.safe_copy())
         self.delete_action.triggered.connect(self.delete_tower)
         self.edit_action.triggered.connect(self.edit_tower)
         self.import_excel_action.triggered.connect(self.import_from_excel)
         self.report_action.triggered.connect(self.generate_report)
         self.back_action.triggered.connect(self.close)
 
-        # Filter
-        self.filter_layout = QHBoxLayout()
-        self.filter_input = QLineEdit()
-        self.filter_input.setPlaceholderText("جستجو در تمام ستون‌ها...")
-        self.filter_input.setFont(QFont("Vazir", 12))
-        self.filter_input.setStyleSheet("""
-            QLineEdit {
-                padding: 5px;
-                border: 1px solid #ccc;
-                border-radius: 8px;
-                background-color: white;
-                width: 300px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #4CAF50;
-            }
-        """)
-        self.filter_input.setFixedWidth(300)
-        self.filter_input.textChanged.connect(self.filter_table)
-        self.filter_input.mousePressEvent = self.clear_placeholder
-        self.filter_layout.addWidget(QLabel("فیلتر:"))
-        self.filter_layout.addWidget(self.filter_input)
-        self.filter_layout.addStretch()
-        self.layout.addLayout(self.filter_layout)
-
         # Table
-        self.table = QTableWidget()
-        self.table.setColumnCount(23)
-        self.table.setHorizontalHeaderLabels(self.original_headers)
-        self.table.setFont(QFont("Vazir", 12))
-        self.table.setStyleSheet("""
-            QTableWidget { 
-                border: 1px solid #ccc; 
-                background-color: white; 
-            }
-        """)
-        self.table.setSelectionMode(QTableWidget.ExtendedSelection)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.AnyKeyPressed | QTableWidget.SelectedClicked)
-        self.table.cellClicked.connect(self.load_row_data)
-        self.table.cellChanged.connect(self.save_cell)
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self.show_context_menu)
-        self.table.horizontalHeader().sectionClicked.connect(self.show_filter_popover)
-        self.layout.addWidget(self.table)
+        self.table = CustomTableWidget(
+            table_name="towers",
+            headers=self.original_headers,
+            column_names=self.column_names,
+            db=self.db
+        )
+        self.layout.addWidget(self.table, 1)  # stretch factor = 1
+        self.table.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.load_table()
+        self.table._custom_edit_callback = self.edit_tower
+        self.table._custom_clear_filters_callback = self.clear_all_filters
 
-        self.load_table()
-
-    def clear_placeholder(self, event):
-        if not self.filter_input.text() or self.filter_input.text() == self.filter_input.placeholderText():
-            self.filter_input.clear()
-        super(QLineEdit, self.filter_input).mousePressEvent(event)
-
-    def show_filter_popover(self, logical_index):
-        try:
-            header = self.table.horizontalHeader()
-            viewport = self.table.viewport()
-            visual_index = header.visualIndex(logical_index)
-            section_pos = header.sectionViewportPosition(visual_index)
-            section_width = header.sectionSize(visual_index)
-            header_height = header.height()
-            h_scroll = self.table.horizontalScrollBar().value()
-            v_scroll = self.table.verticalScrollBar().value()
-            adjusted_pos = section_pos - h_scroll
-            total_width = viewport.width()
-            if adjusted_pos < 0:
-                adjusted_pos = 0
-            elif adjusted_pos + section_width > total_width:
-                adjusted_pos = total_width - section_width
-            local_pos = QPoint(adjusted_pos, header_height - v_scroll)
-            global_pos = self.table.mapToGlobal(local_pos)
-            current_filter = self.column_filters.get(self.column_names[logical_index], "")
-            popover = FilterPopover(
-                self.table,
-                logical_index,
-                self.original_headers[logical_index],
-                current_filter,
-                self.update_column_filter
-            )
-            popover.move(global_pos)
-            popover.show()
-            popover.filter_input.setFocus()
-            logging.debug(f"Filter popover for column {logical_index} at global_pos {global_pos}")
-        except Exception as e:
-            logging.error(f"Error in show_filter_popover: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در نمایش فیلتر: {str(e)}")
+        # تنظیم اشاره‌گر موس به حالت دست برای دکمه‌های نوار ابزار
+        for action in [self.add_action, self.copy_action, self.delete_action, self.edit_action, self.import_excel_action, self.report_action, self.back_action]:
+            btn = self.toolbar.widgetForAction(action)
+            if btn is not None:
+                btn.setCursor(Qt.PointingHandCursor)
 
     def update_column_filter(self, column_index, filter_text):
         try:
@@ -734,17 +649,43 @@ class TowersWindow(QWidget):
                 self.column_filters[column_name] = filter_text
             elif column_name in self.column_filters:
                 del self.column_filters[column_name]
-            new_headers = self.original_headers.copy()
+            
+            # به‌روزرسانی هدرها با آیکن فیلتر
+            header = self.table.horizontalHeader()
             for i, name in enumerate(self.column_names):
                 if name in self.column_filters and self.column_filters[name]:
-                    new_headers[i] = f"{self.original_headers[i]} ▼"
+                    # نمایش آیکن فیلتر
+                    header_item = QTableWidgetItem(self.original_headers[i])
+                    header_item.setIcon(QIcon("resources/Icons/Filter_Table.png"))
+                    self.table.setHorizontalHeaderItem(i, header_item)
                 else:
-                    new_headers[i] = self.original_headers[i]
-            self.table.setHorizontalHeaderLabels(new_headers)
+                    # حذف آیکن فیلتر
+                    header_item = QTableWidgetItem(self.original_headers[i])
+                    self.table.setHorizontalHeaderItem(i, header_item)
+            
             self.load_table()
         except Exception as e:
             logging.error(f"Error in update_column_filter: {str(e)}\n{traceback.format_exc()}")
             QMessageBox.critical(self, "خطا", f"خطا در به‌روزرسانی فیلتر: {str(e)}")
+    
+    def clear_all_filters(self):
+        """حذف تمام فیلترهای ستون‌ها"""
+        try:
+            # پاک کردن فیلترهای ستون‌ها
+            self.column_filters.clear()
+            
+            # بازگرداندن هدرها به حالت عادی (حذف آیکن فیلتر)
+            header = self.table.horizontalHeader()
+            for i in range(len(self.original_headers)):
+                header_item = QTableWidgetItem(self.original_headers[i])
+                self.table.setHorizontalHeaderItem(i, header_item)
+            
+            # بارگذاری مجدد جدول
+            self.load_table()
+            
+            logging.debug("Towers window column filters cleared successfully")
+        except Exception as e:
+            logging.error(f"Error in clear_all_filters: {str(e)}", exc_info=True)
 
     def load_table(self, global_filter=None):
         try:
@@ -782,26 +723,23 @@ class TowersWindow(QWidget):
                 query += " WHERE " + " AND ".join(conditions)
             logging.debug(f"Executing query: {query} with params: {params}")
             rows = self.db.fetch_all(query, tuple(params))
-            self.table.setRowCount(len(rows))
+            self.table.table.setRowCount(len(rows))
+            self.table.table.blockSignals(True)
             for row_idx, row_data in enumerate(rows):
-                for col_idx, data in enumerate(row_data[1:], start=0):
+                for col_idx, data in enumerate(row_data[:-1]):
                     data = str(data) if data is not None else ""
-                    if col_idx in [5, 6, 7, 8]:
-                        try:
-                            num = float(data)
-                            data = str(int(num)) if num.is_integer() else str(num).rstrip('0').rstrip('.')
-                        except (ValueError, TypeError):
-                            pass
                     item = QTableWidgetItem(data)
                     item.setTextAlignment(Qt.AlignCenter)
-                    self.table.setItem(row_idx, col_idx, item)
-                self.table.item(row_idx, 0).setData(Qt.UserRole, row_data[0])
-            self.table.resizeColumnsToContents()
-            for col in range(self.table.columnCount()):
-                if self.table.columnWidth(col) < 100:
-                    self.table.setColumnWidth(col, 100)
-            self.table.resizeRowsToContents()
-            self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)
+                    self.table.table.setItem(row_idx, col_idx, item)
+                self.table.table.item(row_idx, 0).setData(Qt.UserRole, row_data[-1])
+            self.table.table.blockSignals(False)
+            self.table.table.resizeColumnsToContents()
+            for col in range(self.table.table.columnCount()):
+                if self.table.table.columnWidth(col) < 100:
+                    self.table.table.setColumnWidth(col, 100)
+            self.table.table.resizeRowsToContents()
+            self.table.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             logging.debug(f"Table loaded with {len(rows)} rows")
         except Exception as e:
             logging.error(f"Error in load_table: {str(e)}\n{traceback.format_exc()}")
@@ -809,12 +747,19 @@ class TowersWindow(QWidget):
         finally:
             self.table.blockSignals(False)
 
-    def filter_table(self):
+    def perform_search(self):
         try:
-            self.load_table(self.filter_input.text())
+            search_text = self.filter_input.text().strip()
+            logging.debug(f"Performing search: {search_text}")
+            self.load_table(search_text)
         except Exception as e:
-            logging.error(f"Error in filter_table: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در فیلتر جدول: {str(e)}")
+            logging.error(f"Error in perform_search: {str(e)}\n{traceback.format_exc()}")
+            dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"خطا در جستجو: {str(e)}", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxCritical))
+            dlg.exec_()
+
+    def filter_table(self):
+        """برای سازگاری با کد قدیمی - مستقیماً فیلتر می‌کند"""
+        self.perform_search()
 
     def add_tower(self):
         dialog = TowersInputDialog(self)
@@ -845,50 +790,54 @@ class TowersWindow(QWidget):
                     )
                 )
                 self.load_table()
-                QMessageBox.information(self, "موفقیت", "دکل با موفقیت اضافه شد.")
+                dlg = CustomDialog_Flexible(header_text="موفقیت", main_text="دکل با موفقیت اضافه شد.", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxInformation))
+                dlg.exec_()
             except Exception as e:
                 logging.error(f"Error in add_tower: {str(e)}\n{traceback.format_exc()}")
-                QMessageBox.critical(self, "خطا", f"خطا در افزودن دکل: {str(e)}")
+                dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"خطا در افزودن دکل: {str(e)}", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxCritical))
+                dlg.exec_()
 
     def edit_tower(self):
-        selected = self.table.selectedItems()
+        selected = self.table.table.selectedItems()
         if not selected:
-            QMessageBox.warning(self, "خطا", "دکلی انتخاب نشده است!")
+            dlg = CustomDialog_Flexible(header_text="هشدار", main_text="لطفاً ابتدا دکل مورد نظر را انتخاب کنید.", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+            dlg.exec_()
             return
-        row = self.table.currentRow()
-        tower_number = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
-        line_name = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
+        row = self.table.table.currentRow()
+        tower_number = self.table.table.item(row, 1).text() if self.table.table.item(row, 1) else ""
+        line_name = self.table.table.item(row, 0).text() if self.table.table.item(row, 0) else ""
         try:
             result = self.db.fetch_all("SELECT id FROM towers WHERE tower_number=? AND line_name=?", (tower_number, line_name))
             if not result:
-                QMessageBox.critical(self, "خطا", "دکل موردنظر یافت نشد!")
+                dlg = CustomDialog_Flexible(header_text="خطا", main_text="دکل موردنظر یافت نشد!", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxCritical))
+                dlg.exec_()
                 return
             current_id = result[0][0]
             tower_data = {
                 'id': current_id,
                 'line_name': line_name,
                 'tower_number': tower_number,
-                'tower_structure': self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-                'tower_type': self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-                'base_type': self.table.item(row, 4).text() if self.table.item(row, 4) else "",
-                'height_leg_a': self.table.item(row, 5).text() if self.table.item(row, 5) else "",
-                'height_leg_b': self.table.item(row, 6).text() if self.table.item(row, 6) else "",
-                'height_leg_c': self.table.item(row, 7).text() if self.table.item(row, 7) else "",
-                'height_leg_d': self.table.item(row, 8).text() if self.table.item(row, 8) else "",
-                'insulator_type_c1_r': self.table.item(row, 9).text() if self.table.item(row, 9) else "",
-                'insulator_type_c1_s': self.table.item(row, 10).text() if self.table.item(row, 10) else "",
-                'insulator_type_c1_t': self.table.item(row, 11).text() if self.table.item(row, 11) else "",
-                'insulator_type_c2_r': self.table.item(row, 12).text() if self.table.item(row, 12) else "",
-                'insulator_type_c2_s': self.table.item(row, 13).text() if self.table.item(row, 13) else "",
-                'insulator_type_c2_t': self.table.item(row, 14).text() if self.table.item(row, 14) else "",
-                'insulator_count_c1_r': self.table.item(row, 15).text() if self.table.item(row, 15) else "",
-                'insulator_count_c1_s': self.table.item(row, 16).text() if self.table.item(row, 16) else "",
-                'insulator_count_c1_t': self.table.item(row, 17).text() if self.table.item(row, 17) else "",
-                'insulator_count_c2_r': self.table.item(row, 18).text() if self.table.item(row, 18) else "",
-                'insulator_count_c2_s': self.table.item(row, 19).text() if self.table.item(row, 19) else "",
-                'insulator_count_c2_t': self.table.item(row, 20).text() if self.table.item(row, 20) else "",
-                'longitude': self.table.item(row, 21).text() if self.table.item(row, 21) else "",
-                'latitude': self.table.item(row, 22).text() if self.table.item(row, 22) else ""
+                'tower_structure': self.table.table.item(row, 2).text() if self.table.table.item(row, 2) else "",
+                'tower_type': self.table.table.item(row, 3).text() if self.table.table.item(row, 3) else "",
+                'base_type': self.table.table.item(row, 4).text() if self.table.table.item(row, 4) else "",
+                'height_leg_a': self.table.table.item(row, 5).text() if self.table.table.item(row, 5) else "",
+                'height_leg_b': self.table.table.item(row, 6).text() if self.table.table.item(row, 6) else "",
+                'height_leg_c': self.table.table.item(row, 7).text() if self.table.table.item(row, 7) else "",
+                'height_leg_d': self.table.table.item(row, 8).text() if self.table.table.item(row, 8) else "",
+                'insulator_type_c1_r': self.table.table.item(row, 9).text() if self.table.table.item(row, 9) else "",
+                'insulator_type_c1_s': self.table.table.item(row, 10).text() if self.table.table.item(row, 10) else "",
+                'insulator_type_c1_t': self.table.table.item(row, 11).text() if self.table.table.item(row, 11) else "",
+                'insulator_type_c2_r': self.table.table.item(row, 12).text() if self.table.table.item(row, 12) else "",
+                'insulator_type_c2_s': self.table.table.item(row, 13).text() if self.table.table.item(row, 13) else "",
+                'insulator_type_c2_t': self.table.table.item(row, 14).text() if self.table.table.item(row, 14) else "",
+                'insulator_count_c1_r': self.table.table.item(row, 15).text() if self.table.table.item(row, 15) else "",
+                'insulator_count_c1_s': self.table.table.item(row, 16).text() if self.table.table.item(row, 16) else "",
+                'insulator_count_c1_t': self.table.table.item(row, 17).text() if self.table.table.item(row, 17) else "",
+                'insulator_count_c2_r': self.table.table.item(row, 18).text() if self.table.table.item(row, 18) else "",
+                'insulator_count_c2_s': self.table.table.item(row, 19).text() if self.table.table.item(row, 19) else "",
+                'insulator_count_c2_t': self.table.table.item(row, 20).text() if self.table.table.item(row, 20) else "",
+                'longitude': self.table.table.item(row, 21).text() if self.table.table.item(row, 21) else "",
+                'latitude': self.table.table.item(row, 22).text() if self.table.table.item(row, 22) else ""
             }
             dialog = TowersInputDialog(self, tower_data, is_edit=True)
             if dialog.exec_() == QDialog.Accepted:
@@ -918,288 +867,352 @@ class TowersWindow(QWidget):
                         tower_data['id']
                     )
                 )
-                self.load_table()
-                QMessageBox.information(self, "موفقیت", "دکل با موفقیت ویرایش شد.")
+                self.table.load_table()
+                dlg = CustomDialog_Flexible(header_text="موفقیت", main_text="دکل با موفقیت ویرایش شد.", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxInformation))
+                dlg.exec_()
         except Exception as e:
             logging.error(f"Error in edit_tower: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در ویرایش دکل: {str(e)}")
+            dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"خطا در ویرایش دکل: {str(e)}", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxCritical))
+            dlg.exec_()
+
+    def safe_copy(self):
+        """کپی کردن دکل انتخاب شده - مشابه عملکرد کلیک راست"""
+        try:
+            TableActions.copy_selected(self.table.table, self.db, self, "towers", self.table.load_table)
+        except Exception as e:
+            logging.error(f"Exception in safe_copy: {str(e)}", exc_info=True)
+            dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"خطا در کپی: {str(e)}", ok_text="باشه", parent=self)
+            dlg.exec_()
 
     def delete_tower(self):
-        selected_rows = sorted(set(index.row() for index in self.table.selectedIndexes()))
+        selected_rows = sorted(set(index.row() for index in self.table.table.selectedIndexes()))
         if not selected_rows:
-            QMessageBox.warning(self, "خطا", "دکلی انتخاب نشده است!")
+            dlg = CustomDialog_Flexible(header_text="هشدار", main_text="لطفاً ابتدا دکل مورد نظر را انتخاب کنید.", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+            dlg.exec_()
             return
+
         row_count = len(selected_rows)
-        msg = f"آیا از حذف {row_count} دکل مطمئن هستید؟"
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("تأیید حذف")
-        msg_box.setText(msg)
-        msg_box.setStandardButtons(QMessageBox.NoButton)
-        yes_button = msg_box.addButton("بله", QMessageBox.YesRole)
-        no_button = msg_box.addButton("خیر", QMessageBox.RejectRole)
-        yes_button.setFont(QFont("Vazir", 12))
-        no_button.setFont(QFont("Vazir", 12))
-        msg_box.setDefaultButton(no_button)
-        msg_box.setLayoutDirection(Qt.RightToLeft)
-        msg_box.exec_()
-        if msg_box.clickedButton() != yes_button:
+        msg = f"آیا از حذف این {row_count} دکل مطمئن هستید؟"
+        dlg = CustomDialog_Flexible(header_text="تأیید حذف", main_text=msg, ok_text="بله", cancel_text="خیر", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+        if dlg.exec_() != dlg.Accepted:
             return
+
         try:
+            progress = CustomDialog_Progress(header_text="در حال حذف دکل‌ها...", cancel_text="لغو عملیات", parent=self)
+            progress.set_maximum(row_count)
+            progress.set_progress(0)
+            progress.set_text(f"0 از {row_count}")
+            progress.show()
+            QApplication.processEvents()
+            self.deletion_cancelled = False
+            deleted_count = 0
+            def cancel():
+                self.deletion_cancelled = True
+            progress.cancel_btn.clicked.connect(cancel)
+            # ابتدا کلیدهای دکل‌های انتخاب شده را جمع‌آوری کنیم
+            towers_to_delete = []
             for row in selected_rows:
-                tower_number = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
-                line_name = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
-                self.db.execute_query("DELETE FROM towers WHERE tower_number=? AND line_name=?", (tower_number, line_name))
-            self.load_table()
-            QMessageBox.information(self, "موفقیت", f"{row_count} دکل با موفقیت حذف شد.")
+                line_name = self.table.table.item(row, 0).text() if self.table.table.item(row, 0) else ""
+                tower_number = self.table.table.item(row, 1).text() if self.table.table.item(row, 1) else ""
+                if line_name and tower_number:
+                    towers_to_delete.append((line_name, tower_number))
+            # حالا حذف را انجام دهیم
+            for i, (line_name, tower_number) in enumerate(towers_to_delete):
+                try:
+                    QApplication.processEvents()
+                    if self.deletion_cancelled:
+                        break
+                    progress.set_progress(i + 1)
+                    progress.set_text(f"{i+1} از {row_count}")
+                    self.db.execute_query("DELETE FROM towers WHERE tower_number=? AND line_name=?", (tower_number, line_name))
+                    deleted_count += 1
+                except Exception as e:
+                    logging.error(f"Error deleting tower {tower_number} from line {line_name}: {str(e)}")
+                    continue
+            # بستن progress dialog
+            try:
+                progress.close()
+            except:
+                pass
+            try:
+                self.table.load_table()
+            except Exception as e:
+                logging.error(f"Error in load_table after deletion: {str(e)}")
+            if self.deletion_cancelled:
+                msg = f"عملیات لغو شد و {deleted_count} دکل تا این لحظه حذف شد."
+                self.table.table.clearSelection()
+                dlg = CustomDialog_Flexible(header_text="لغو عملیات", main_text=msg, ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+                dlg.exec_()
+            elif deleted_count > 0:
+                self.table.table.clearSelection()
+                dlg = CustomDialog_Flexible(header_text="موفقیت", main_text=f"{deleted_count} دکل با موفقیت حذف شد.", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxInformation))
+                dlg.exec_()
         except Exception as e:
             logging.error(f"Error in delete_tower: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در حذف: {str(e)}")
+            try:
+                progress.close()
+            except:
+                pass
+            dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"خطا در حذف: {str(e)}", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxCritical))
+            dlg.exec_()
 
     def load_row_data(self):
         pass
 
     def generate_report(self):
-        try:
-            rows = self.db.fetch_all("""
-                SELECT t.line_name, t.tower_number, t.tower_structure, t.tower_type, t.base_type,
-                       t.height_leg_a, t.height_leg_b, t.height_leg_c, t.height_leg_d,
-                       t.insulator_type_c1_r, t.insulator_type_c1_s, t.insulator_type_c1_t,
-                       t.insulator_type_c2_r, t.insulator_type_c2_s, t.insulator_type_c2_t,
-                       t.insulator_count_c1_r, t.insulator_count_c1_s, t.insulator_count_c1_t,
-                       t.insulator_count_c2_r, t.insulator_count_c2_s, t.insulator_count_c2_t,
-                       t.longitude, t.latitude, l.supervisor
-                FROM towers t
-                LEFT JOIN lines l ON t.line_name = l.line_name
-            """)
-            
-            # Add supervisor column to headers for export
-            export_headers = self.original_headers + ["سرپرست خط"]
-            
-            with open("towers_report.csv", "w", encoding="utf-8-sig", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(export_headers)
-                writer.writerows(rows)
-            QMessageBox.information(self, "موفقیت", "گزارش با نام towers_report.csv ذخیره شد.")
-        except Exception as e:
-            logging.error(f"Error in generate_report: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در تولید گزارش: {str(e)}")
-
-    def format_number(self, value):
-        if pd.notna(value):
-            try:
-                num = float(value)
-                return str(int(num)) if num.is_integer() else str(num).rstrip('0').rstrip('.')
-            except (ValueError, TypeError):
-                return str(value)
-        return ""
+        self.table.generate_report(parent=self, headers=self.original_headers)
 
     def import_from_excel(self):
         try:
+            from collections import defaultdict
+            import re
+            def summarize_towers(tower_list):
+                line_dict = defaultdict(list)
+                for item in tower_list:
+                    match = re.match(r"خط (.*?) - دکل (\d+)", item)
+                    if match:
+                        line_name = match.group(1)
+                        tower_num = int(match.group(2))
+                        line_dict[line_name].append(tower_num)
+                result = []
+                for line, towers in line_dict.items():
+                    towers = sorted(set(towers))
+                    def to_ranges(nums):
+                        ranges = []
+                        start = end = None
+                        for n in nums:
+                            if start is None:
+                                start = end = n
+                            elif n == end + 1:
+                                end = n
+                            else:
+                                if start == end:
+                                    ranges.append(str(start))
+                                else:
+                                    ranges.append(f"{start}-{end}")
+                                start = end = n
+                        if start is not None:
+                            if start == end:
+                                ranges.append(str(start))
+                            else:
+                                ranges.append(f"{start}-{end}")
+                        return ", ".join(ranges)
+                    range_str = to_ranges(towers)
+                    result.append(f"خط {line}: دکل‌های {range_str}")
+                return result
+            def summarize_invalid_lines(invalid_list):
+                line_dict = defaultdict(list)
+                for item in invalid_list:
+                    match = re.match(r"خط (.*?) - دکل (\d+)", item)
+                    if match:
+                        line_name = match.group(1)
+                        tower_num = int(match.group(2))
+                        line_dict[line_name].append(tower_num)
+                    else:
+                        match2 = re.match(r"خط (.*)", item)
+                        if match2:
+                            line_name = match2.group(1)
+                            line_dict[line_name] = []
+                result = []
+                for line, towers in line_dict.items():
+                    if towers:
+                        towers = sorted(set(towers))
+                        def to_ranges(nums):
+                            ranges = []
+                            start = end = None
+                            for n in nums:
+                                if start is None:
+                                    start = end = n
+                                elif n == end + 1:
+                                    end = n
+                                else:
+                                    if start == end:
+                                        ranges.append(str(start))
+                                    else:
+                                        ranges.append(f"{start}-{end}")
+                                    start = end = n
+                            if start is not None:
+                                if start == end:
+                                    ranges.append(str(start))
+                                else:
+                                    ranges.append(f"{start}-{end}")
+                            return ", ".join(ranges)
+                        range_str = to_ranges(towers)
+                        result.append(f"خط {line}: دکل‌های {range_str}")
+                    else:
+                        result.append(f"خط {line}")
+                return result
             file_path, _ = QFileDialog.getOpenFileName(self, "انتخاب فایل اکسل", "", "Excel Files (*.xlsx *.xls)")
             if not file_path:
                 return
             df = pd.read_excel(file_path)
-            
-            # Check if supervisor column exists and handle it properly
-            has_supervisor = "سرپرست خط" in df.columns
             expected_columns = self.original_headers
-            if has_supervisor:
-                expected_columns = expected_columns + ["سرپرست خط"]
-                
             if not all(col in df.columns for col in expected_columns):
-                missing_cols = [col for col in expected_columns if col not in df.columns]
-                QMessageBox.critical(self, "خطا", f"ستون‌های زیر در فایل اکسل یافت نشدند: {', '.join(missing_cols)}")
-                return
+                # ساخت متن خطا با فرمت بهتر
+                error_text = "ساختار فایل اکسل نادرست است!\n\nستون‌های مورد انتظار:\n"
+                # تقسیم ستون‌ها به خطوط جداگانه برای خوانایی بهتر
+                columns_text = "\n".join([f"• {col}" for col in expected_columns])
+                error_text += columns_text
                 
+                dlg = CustomDialog_Flexible(
+                    header_text="خطا", 
+                    main_text=error_text, 
+                    ok_text="باشه", 
+                    cancel_text=None, 
+                    parent=self, 
+                    icon=QIcon(self.style().standardIcon(QStyle.SP_MessageBoxCritical))
+                )
+                dlg.exec_()
+                return
+
+            self.import_cancelled = False
+            
+            # دریافت دکل‌های موجود در دیتابیس
             existing_towers = {(row[0], row[1]) for row in self.db.fetch_all("SELECT line_name, tower_number FROM towers") if row[0] and row[1]}
+            
+            # دریافت خطوط معتبر
             valid_lines = {row[0] for row in self.db.fetch_all("SELECT line_name FROM lines") if row[0]}
             
-            # Get valid supervisors from lines table
-            valid_supervisors = {row[0] for row in self.db.fetch_all("SELECT DISTINCT supervisor FROM lines WHERE supervisor IS NOT NULL AND supervisor != ''") if row[0]}
+            # بررسی داده‌های فایل Excel
+            duplicate_in_file = []
+            invalid_lines = []
+            valid_rows = []
             
-            inserted_count = 0
-            errors = []
             for index, row in df.iterrows():
-                line_name = str(row["نام خط"]) if pd.notna(row["نام خط"]) else ""
-                tower_number = str(row["شماره دکل"]) if pd.notna(row["شماره دکل"]) else ""
+                line_name = str(row["نام خط"]).strip() if pd.notna(row["نام خط"]) else ""
+                tower_number = str(row["شماره دکل"]).strip() if pd.notna(row["شماره دکل"]) else ""
                 
-                if not line_name:
-                    errors.append(f"ردیف {index + 2}: نام خط خالی است")
+                if not line_name or not tower_number:
                     continue
-                if not tower_number:
-                    errors.append(f"ردیف {index + 2}: شماره دکل خالی است")
+                
+                # بررسی تکراری بودن در فایل
+                tower_key = (line_name, tower_number)
+                if tower_key in [r[0] for r in valid_rows]:
+                    duplicate_in_file.append(f"خط {line_name} - دکل {tower_number}")
                     continue
+                
+                # بررسی وجود در دیتابیس
+                if tower_key in existing_towers:
+                    duplicate_in_file.append(f"خط {line_name} - دکل {tower_number}")
+                    continue
+                
+                # بررسی معتبر بودن نام خط
                 if line_name not in valid_lines:
-                    errors.append(f"ردیف {index + 2}: نام خط '{line_name}' نامعتبر است")
+                    invalid_lines.append(f"خط {line_name}")
                     continue
-                if (line_name, tower_number) in existing_towers:
-                    errors.append(f"ردیف {index + 2}: دکل '{tower_number}' برای خط '{line_name}' تکراری است")
-                    continue
-                    
-                # Handle supervisor validation if column exists
-                if has_supervisor:
-                    supervisor = str(row["سرپرست خط"]) if pd.notna(row["سرپرست خط"]) else ""
-                    if supervisor and supervisor not in valid_supervisors:
-                        errors.append(f"ردیف {index + 2}: سرپرست خط '{supervisor}' نامعتبر است")
-                        continue
                 
-                # Validate numeric fields
-                height_leg_a = str(row["ارتفاع پایه A"]) if pd.notna(row["ارتفاع پایه A"]) else ""
-                if height_leg_a and not re.match(r"^\d*\.?\d*$", height_leg_a):
-                    errors.append(f"ردیف {index + 2}: ارتفاع پایه A باید عدد باشد")
-                    continue
-                height_leg_b = str(row["ارتفاع پایه B"]) if pd.notna(row["ارتفاع پایه B"]) else ""
-                if height_leg_b and not re.match(r"^\d*\.?\d*$", height_leg_b):
-                    errors.append(f"ردیف {index + 2}: ارتفاع پایه B باید عدد باشد")
-                    continue
-                height_leg_c = str(row["ارتفاع پایه C"]) if pd.notna(row["ارتفاع پایه C"]) else ""
-                if height_leg_c and not re.match(r"^\d*\.?\d*$", height_leg_c):
-                    errors.append(f"ردیف {index + 2}: ارتفاع پایه C باید عدد باشد")
-                    continue
-                height_leg_d = str(row["ارتفاع پایه D"]) if pd.notna(row["ارتفاع پایه D"]) else ""
-                if height_leg_d and not re.match(r"^\d*\.?\d*$", height_leg_d):
-                    errors.append(f"ردیف {index + 2}: ارتفاع پایه D باید عدد باشد")
-                    continue
-                    
-                # Validate insulator counts
-                insulator_count_c1_r = str(row["تعداد R مدار اول"]) if pd.notna(row["تعداد R مدار اول"]) else ""
-                if insulator_count_c1_r and not insulator_count_c1_r.isdigit():
-                    errors.append(f"ردیف {index + 2}: تعداد R مدار اول باید عدد باشد")
-                    continue
-                insulator_count_c1_s = str(row["تعداد S مدار اول"]) if pd.notna(row["تعداد S مدار اول"]) else ""
-                if insulator_count_c1_s and not insulator_count_c1_s.isdigit():
-                    errors.append(f"ردیف {index + 2}: تعداد S مدار اول باید عدد باشد")
-                    continue
-                insulator_count_c1_t = str(row["تعداد T مدار اول"]) if pd.notna(row["تعداد T مدار اول"]) else ""
-                if insulator_count_c1_t and not insulator_count_c1_t.isdigit():
-                    errors.append(f"ردیف {index + 2}: تعداد T مدار اول باید عدد باشد")
-                    continue
-                insulator_count_c2_r = str(row["تعداد R مدار دوم"]) if pd.notna(row["تعداد R مدار دوم"]) else ""
-                if insulator_count_c2_r and not insulator_count_c2_r.isdigit():
-                    errors.append(f"ردیف {index + 2}: تعداد R مدار دوم باید عدد باشد")
-                    continue
-                insulator_count_c2_s = str(row["تعداد S مدار دوم"]) if pd.notna(row["تعداد S مدار دوم"]) else ""
-                if insulator_count_c2_s and not insulator_count_c2_s.isdigit():
-                    errors.append(f"ردیف {index + 2}: تعداد S مدار دوم باید عدد باشد")
-                    continue
-                insulator_count_c2_t = str(row["تعداد T مدار دوم"]) if pd.notna(row["تعداد T مدار دوم"]) else ""
-                if insulator_count_c2_t and not insulator_count_c2_t.isdigit():
-                    errors.append(f"ردیف {index + 2}: تعداد T مدار دوم باید عدد باشد")
-                    continue
-                    
-                # Insert tower data
-                self.db.execute_query(
-                    """
-                    INSERT INTO towers (line_name, tower_number, tower_structure, tower_type, base_type,
-                                    height_leg_a, height_leg_b, height_leg_c, height_leg_d,
-                                    insulator_type_c1_r, insulator_type_c1_s, insulator_type_c1_t,
-                                    insulator_type_c2_r, insulator_type_c2_s, insulator_type_c2_t,
-                                    insulator_count_c1_r, insulator_count_c1_s, insulator_count_c1_t,
-                                    insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t,
-                                    longitude, latitude)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                    (
-                        line_name,
-                        tower_number,
-                        str(row["ساختار دکل"]) if pd.notna(row["ساختار دکل"]) else "",
-                        str(row["نوع دکل"]) if pd.notna(row["نوع دکل"]) else "",
-                        str(row["نوع پایه"]) if pd.notna(row["نوع پایه"]) else "",
-                        self.format_number(row["ارتفاع پایه A"]),
-                        self.format_number(row["ارتفاع پایه B"]),
-                        self.format_number(row["ارتفاع پایه C"]),
-                        self.format_number(row["ارتفاع پایه D"]),
-                        str(row["نوع مقره R مدار اول"]) if pd.notna(row["نوع مقره R مدار اول"]) else "",
-                        str(row["نوع مقره S مدار اول"]) if pd.notna(row["نوع مقره S مدار اول"]) else "",
-                        str(row["نوع مقره T مدار اول"]) if pd.notna(row["نوع مقره T مدار اول"]) else "",
-                        str(row["نوع مقره R مدار دوم"]) if pd.notna(row["نوع مقره R مدار دوم"]) else "",
-                        str(row["نوع مقره S مدار دوم"]) if pd.notna(row["نوع مقره S مدار دوم"]) else "",
-                        str(row["نوع مقره T مدار دوم"]) if pd.notna(row["نوع مقره T مدار دوم"]) else "",
-                        insulator_count_c1_r,
-                        insulator_count_c1_s,
-                        insulator_count_c1_t,
-                        insulator_count_c2_r,
-                        insulator_count_c2_s,
-                        insulator_count_c2_t,
-                        str(row["طول جغرافیایی"]) if pd.notna(row["طول جغرافیایی"]) else None,
-                        str(row["عرض جغرافیایی"]) if pd.notna(row["عرض جغرافیایی"]) else None
-                    )
+                valid_rows.append((tower_key, row))
+            
+            # نمایش خطاها
+            error_messages = []
+            if duplicate_in_file:
+                summarized = summarize_towers(duplicate_in_file)
+                error_messages.append(f"دکل‌های تکراری ({len(duplicate_in_file)} مورد):\n" + "\n".join(summarized[:10]) + (f"\n... و {len(summarized)-10} خط دیگر" if len(summarized) > 10 else ""))
+            if invalid_lines:
+                summarized = summarize_invalid_lines(invalid_lines)
+                error_messages.append(f"خطوط نامعتبر ({len(invalid_lines)} مورد):\n" + "\n".join(summarized[:10]) + (f"\n... و {len(summarized)-10} خط دیگر" if len(summarized) > 10 else ""))
+            
+            if error_messages:
+                error_text = "\n\n".join(error_messages)
+                error_text += f"\n\nاز {len(df)} ردیف، فقط {len(valid_rows)} ردیف قابل وارد کردن است."
+                dlg = CustomDialog_Flexible(
+                    header_text="خطاهای یافت شده",
+                    main_text=error_text,
+                    ok_text="بله",
+                    cancel_text="خیر",
+                    question_text="آیا می‌خواهید دکل‌های معتبر را وارد کنید؟",
+                    parent=self
                 )
-                
-                # Update supervisor in lines table if provided
-                if has_supervisor:
-                    supervisor = str(row["سرپرست خط"]) if pd.notna(row["سرپرست خط"]) else ""
-                    if supervisor:
-                        self.db.execute_query(
-                            "UPDATE lines SET supervisor = ? WHERE line_name = ?",
-                            (supervisor, line_name)
+                dlg.adjustSize()
+                if dlg.exec_() != dlg.Accepted:
+                    return
+            if not valid_rows:
+                dlg = CustomDialog_Flexible(header_text="هشدار", main_text="هیچ دکل معتبری برای وارد کردن یافت نشد.", ok_text="باشه", cancel_text=None, parent=self, icon=QIcon(self.style().standardIcon(QStyle.SP_MessageBoxWarning)))
+                dlg.exec_()
+                return
+            inserted_count = 0
+            duplicate_count = 0
+            progress = CustomDialog_Progress(header_text="در حال وارد کردن اطلاعات دکل‌ها...", cancel_text="لغو عملیات", parent=self)
+            progress.set_maximum(len(valid_rows))
+            progress.set_progress(0)
+            progress.set_text(f"0 از {len(valid_rows)}")
+            progress.show()
+            QApplication.processEvents()
+            def cancel():
+                self.import_cancelled = True
+            progress.cancel_btn.clicked.connect(cancel)
+            for i, (tower_key, row) in enumerate(valid_rows):
+                QApplication.processEvents()
+                if self.import_cancelled:
+                    break
+                progress.set_progress(i + 1)
+                progress.set_text(f"{i+1} از {len(valid_rows)}")
+                line_name, tower_number = tower_key
+                # بررسی تکراری بودن
+                if (line_name, tower_number) in existing_towers:
+                    duplicate_count += 1
+                    continue
+                try:
+                    self.db.execute_query(
+                        """
+                        INSERT INTO towers (line_name, tower_number, tower_structure, tower_type, base_type,
+                                        height_leg_a, height_leg_b, height_leg_c, height_leg_d,
+                                        insulator_type_c1_r, insulator_type_c1_s, insulator_type_c1_t,
+                                        insulator_type_c2_r, insulator_type_c2_s, insulator_type_c2_t,
+                                        insulator_count_c1_r, insulator_count_c1_s, insulator_count_c1_t,
+                                        insulator_count_c2_r, insulator_count_c2_s, insulator_count_c2_t,
+                                        longitude, latitude)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """,
+                        (
+                            line_name,
+                            tower_number,
+                            str(row["ساختار دکل"]) if pd.notna(row["ساختار دکل"]) else "",
+                            str(row["نوع دکل"]) if pd.notna(row["نوع دکل"]) else "",
+                            str(row["نوع پایه"]) if pd.notna(row["نوع پایه"]) else "",
+                            str(row["ارتفاع پایه A"]) if pd.notna(row["ارتفاع پایه A"]) else "",
+                            str(row["ارتفاع پایه B"]) if pd.notna(row["ارتفاع پایه B"]) else "",
+                            str(row["ارتفاع پایه C"]) if pd.notna(row["ارتفاع پایه C"]) else "",
+                            str(row["ارتفاع پایه D"]) if pd.notna(row["ارتفاع پایه D"]) else "",
+                            str(row["نوع مقره R مدار اول"]) if pd.notna(row["نوع مقره R مدار اول"]) else "",
+                            str(row["نوع مقره S مدار اول"]) if pd.notna(row["نوع مقره S مدار اول"]) else "",
+                            str(row["نوع مقره T مدار اول"]) if pd.notna(row["نوع مقره T مدار اول"]) else "",
+                            str(row["نوع مقره R مدار دوم"]) if pd.notna(row["نوع مقره R مدار دوم"]) else "",
+                            str(row["نوع مقره S مدار دوم"]) if pd.notna(row["نوع مقره S مدار دوم"]) else "",
+                            str(row["نوع مقره T مدار دوم"]) if pd.notna(row["نوع مقره T مدار دوم"]) else "",
+                            str(row["تعداد R مدار اول"]) if pd.notna(row["تعداد R مدار اول"]) else "",
+                            str(row["تعداد S مدار اول"]) if pd.notna(row["تعداد S مدار اول"]) else "",
+                            str(row["تعداد T مدار اول"]) if pd.notna(row["تعداد T مدار اول"]) else "",
+                            str(row["تعداد R مدار دوم"]) if pd.notna(row["تعداد R مدار دوم"]) else "",
+                            str(row["تعداد S مدار دوم"]) if pd.notna(row["تعداد S مدار دوم"]) else "",
+                            str(row["تعداد T مدار دوم"]) if pd.notna(row["تعداد T مدار دوم"]) else "",
+                            str(row["طول جغرافیایی"]) if pd.notna(row["طول جغرافیایی"]) else None,
+                            str(row["عرض جغرافیایی"]) if pd.notna(row["عرض جغرافیایی"]) else None
                         )
-                
-                inserted_count += 1
-                existing_towers.add((line_name, tower_number))
-                
+                    )
+                    inserted_count += 1
+                    existing_towers.add((line_name, tower_number))
+                except Exception as e:
+                    logging.error(f"Error inserting tower {line_name}-{tower_number}: {str(e)}")
+                    continue
+            progress.accept()
+            if self.import_cancelled:
+                self.load_table()
+                msg = f"عملیات لغو شد و {inserted_count} دکل تا این لحظه وارد شد."
+                if duplicate_count > 0:
+                    msg += f" {duplicate_count} دکل به دلیل تکراری بودن وارد نشد."
+                dlg = CustomDialog_Flexible(header_text="لغو عملیات", main_text=msg, ok_text="باشه", parent=self)
+                dlg.exec_()
+                return
             self.load_table()
-            if errors:
-                QMessageBox.warning(self, "هشدار", f"{inserted_count} دکل وارد شد، اما {len(errors)} خطا رخ داد:\n" + "\n".join(errors[:5]))
-            else:
-                QMessageBox.information(self, "موفقیت", f"{inserted_count} دکل با موفقیت از فایل اکسل وارد شد.")
+            msg = f"{inserted_count} دکل با موفقیت وارد شد."
+            if duplicate_count > 0:
+                msg += f"\n{duplicate_count} دکل به دلیل تکراری بودن وارد نشد."
+            dlg = CustomDialog_Flexible(header_text="موفقیت", main_text=msg, ok_text="باشه", parent=self)
+            dlg.exec_()
         except Exception as e:
-            logging.error(f"Error in import_from_excel: {str(e)}\n{traceback.format_exc()}")
+            logging.error(f"Error in import_from_excel: {str(e)}")
             QMessageBox.critical(self, "خطا", f"خطا در وارد کردن اطلاعات از اکسل: {str(e)}")
-
-    def show_context_menu(self, position):
-        try:
-            menu = QMenu(self)
-            menu.setStyleSheet("""
-                QMenu { 
-                    background-color: white; 
-                    border: 1px solid #ccc; 
-                    direction: ltr; 
-                }
-                QMenu::item { 
-                    padding: 5px 20px; 
-                    color: black; 
-                    direction: ltr; 
-                }
-                QMenu::item:selected { 
-                    background-color: #d0d0d0; 
-                    color: black; 
-                }
-            """)
-            copy_action = QAction("کپی", self)
-            copy_action.triggered.connect(self.copy_selected_cells)
-            menu.addAction(copy_action)
-            edit_action = QAction("ویرایش", self)
-            edit_action.triggered.connect(self.edit_tower)
-            menu.addAction(edit_action)
-            delete_action = QAction("حذف", self)
-            delete_action.triggered.connect(self.delete_tower)
-            menu.addAction(delete_action)
-            selected_items = bool(self.table.selectedItems())
-            copy_action.setEnabled(selected_items)
-            edit_action.setEnabled(selected_items)
-            delete_action.setEnabled(selected_items)
-            menu.exec_(self.table.viewport().mapToGlobal(position))
-        except Exception as e:
-            logging.error(f"Error in show_context_menu: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در نمایش منوی راست‌کلیک: {str(e)}")
-
-    def copy_selected_cells(self):
-        selected_items = self.table.selectedItems()
-        if not selected_items:
-            return
-        rows = sorted(set(item.row() for item in selected_items))
-        cols = sorted(set(item.column() for item in selected_items))
-        text = ""
-        for row in rows:
-            row_data = []
-            for col in cols:
-                item = self.table.item(row, col)
-                row_data.append(item.text() if item else "")
-            text += "\t".join(row_data) + "\n"
-        clipboard = QApplication.clipboard()
-        clipboard.setText(text)
-        QMessageBox.information(self, "موفقیت", "محتوای سلول‌های انتخاب‌شده کپی شد.")
 
     def save_cell(self, row, col):
         try:
@@ -1214,34 +1227,40 @@ class TowersWindow(QWidget):
             column_name = self.column_names[col]
             if column_name in ['height_leg_a', 'height_leg_b', 'height_leg_c', 'height_leg_d']:
                 if new_value and not re.match(r"^\d*\.?\d*$", new_value):
-                    QMessageBox.critical(self, "خطا", f"مقدار {self.original_headers[col]} باید عدد باشد!")
+                    dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"مقدار {self.original_headers[col]} باید عدد باشد!", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+                    dlg.exec_()
                     self.load_table()
                     return
             elif column_name in ['insulator_count_c1_r', 'insulator_count_c1_s', 'insulator_count_c1_t',
                                  'insulator_count_c2_r', 'insulator_count_c2_s', 'insulator_count_c2_t']:
                 if new_value and not new_value.isdigit():
-                    QMessageBox.critical(self, "خطا", f"مقدار {self.original_headers[col]} باید عدد باشد!")
+                    dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"مقدار {self.original_headers[col]} باید عدد باشد!", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+                    dlg.exec_()
                     self.load_table()
                     return
             elif column_name == 'tower_number':
                 if not new_value:
-                    QMessageBox.critical(self, "خطا", "شماره دکل اجباری است!")
+                    dlg = CustomDialog_Flexible(header_text="خطا", main_text="شماره دکل اجباری است!", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+                    dlg.exec_()
                     self.load_table()
                     return
                 line_name = self.table.item(row, 0).text()
                 existing_towers = self.db.fetch_all("SELECT tower_number FROM towers WHERE line_name = ? AND id != ?", (line_name, tower_id))
                 if new_value in [tower[0] for tower in existing_towers]:
-                    QMessageBox.critical(self, "خطا", "شماره دکل باید یکتا باشد!")
+                    dlg = CustomDialog_Flexible(header_text="خطا", main_text="شماره دکل باید یکتا باشد!", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+                    dlg.exec_()
                     self.load_table()
                     return
             elif column_name == 'line_name':
                 if not new_value:
-                    QMessageBox.critical(self, "خطا", "نام خط اجباری است!")
+                    dlg = CustomDialog_Flexible(header_text="خطا", main_text="نام خط اجباری است!", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+                    dlg.exec_()
                     self.load_table()
                     return
                 valid_lines = self.db.fetch_all("SELECT line_name FROM lines")
                 if new_value not in [line[0] for line in valid_lines]:
-                    QMessageBox.critical(self, "خطا", "نام خط نامعتبر است!")
+                    dlg = CustomDialog_Flexible(header_text="خطا", main_text="نام خط نامعتبر است!", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxWarning))
+                    dlg.exec_()
                     self.load_table()
                     return
             query = f"UPDATE towers SET {column_name} = ? WHERE id = ?"
@@ -1249,5 +1268,6 @@ class TowersWindow(QWidget):
             logging.debug(f"Updated {column_name} to '{new_value}' for tower_id {tower_id}")
         except Exception as e:
             logging.error(f"Error in save_cell: {str(e)}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "خطا", f"خطا در ذخیره تغییرات: {str(e)}")
+            dlg = CustomDialog_Flexible(header_text="خطا", main_text=f"خطا در ذخیره تغییرات: {str(e)}", ok_text="باشه", parent=self, icon=self.style().standardIcon(QStyle.SP_MessageBoxCritical))
+            dlg.exec_()
             self.load_table()
